@@ -35,7 +35,7 @@ if (process.env.GEMINI_API_KEY) {
   geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   
   if (process.env.GEMINI_BASE_URL) {
-    console.error("Warning: GEMINI_BASE_URL is set but custom base URLs are not currently supported by @google/generative-ai SDK");
+    console.warn("Warning: GEMINI_BASE_URL is set but custom base URLs are not currently supported by @google/generative-ai SDK");
   }
 }
 
@@ -252,7 +252,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Try to generate image using the model
       // Note: This implementation depends on the specific Gemini model capabilities
       // Some models may return inline image data, others may return URLs
-      const result = await genModel.generateContent(prompt);
+      // The aspect_ratio parameter is included in the prompt since it's not directly supported
+      // by all models through the SDK API
+      const promptWithAspectRatio = aspect_ratio !== "1:1" 
+        ? `${prompt} (aspect ratio: ${aspect_ratio})`
+        : prompt;
+      
+      const result = await genModel.generateContent(promptWithAspectRatio);
 
       const response = result.response;
       const candidates = response.candidates;

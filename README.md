@@ -37,6 +37,7 @@ Generate images using Google's Gemini models with image generation capabilities.
 - `model` (optional): Model name (default: "gemini-2.0-flash-exp")
 - `number_of_images` (optional): Number of images to generate (currently only supports 1)
 - `aspect_ratio` (optional): "1:1", "3:4", "4:3", "9:16", or "16:9" (default: "1:1")
+  - Note: Aspect ratio is included in the prompt since it's not directly supported by the SDK API
 
 **Returns:** JSON with image data (base64-encoded) or text response if model doesn't support image generation
 
