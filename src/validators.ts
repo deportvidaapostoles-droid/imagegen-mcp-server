@@ -3,7 +3,7 @@
  */
 
 export type OpenAIModel = 'dall-e-2' | 'dall-e-3';
-export type GeminiModel = 'gemini-2.0-flash' | 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash-exp-image-generation';
+export type GeminiModel = 'gemini-3-pro-image-preview' | 'gemini-2.5-flash-image' | 'gemini-2.0-flash-exp-image-generation' | 'imagen-4.0-generate-001' | 'imagen-4.0-ultra-generate-001' | 'imagen-4.0-fast-generate-001';
 export type SupportedModel = OpenAIModel | GeminiModel;
 
 export type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
@@ -17,10 +17,12 @@ export type ResponseFormat = 'url' | 'base64' | 'auto';
 export const SUPPORTED_MODELS = [
   'dall-e-2',
   'dall-e-3',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash',
-  'gemini-2.5-pro',
+  'gemini-3-pro-image-preview',
+  'gemini-2.5-flash-image',
   'gemini-2.0-flash-exp-image-generation',
+  'imagen-4.0-generate-001',
+  'imagen-4.0-ultra-generate-001',
+  'imagen-4.0-fast-generate-001',
 ] as const;
 
 export const DALLE3_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];

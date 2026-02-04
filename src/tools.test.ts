@@ -33,7 +33,7 @@ describe('GENERATE_IMAGE_TOOL', () => {
     expect(schema.properties.model).toBeDefined();
     expect(schema.properties.model.enum).toContain('dall-e-2');
     expect(schema.properties.model.enum).toContain('dall-e-3');
-    expect(schema.properties.model.enum).toContain('gemini-2.0-flash');
+    expect(schema.properties.model.enum).toContain('gemini-3-pro-image-preview');
   });
 
   it('should define size property', () => {

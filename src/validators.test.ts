@@ -18,8 +18,8 @@ describe('isOpenAIModel', () => {
   });
 
   it('should return false for gemini models', () => {
-    expect(isOpenAIModel('gemini-2.0-flash')).toBe(false);
-    expect(isOpenAIModel('gemini-2.5-flash')).toBe(false);
+    expect(isOpenAIModel('gemini-3-pro-image-preview')).toBe(false);
+    expect(isOpenAIModel('gemini-2.5-flash-image')).toBe(false);
   });
 
   it('should return false for unknown models', () => {
@@ -31,8 +31,8 @@ describe('isOpenAIModel', () => {
 
 describe('isGeminiModel', () => {
   it('should return true for gemini models', () => {
-    expect(isGeminiModel('gemini-2.0-flash')).toBe(true);
-    expect(isGeminiModel('gemini-2.5-flash')).toBe(true);
+    expect(isGeminiModel('gemini-3-pro-image-preview')).toBe(true);
+    expect(isGeminiModel('gemini-2.5-flash-image')).toBe(true);
   });
 
   it('should return true for imagen models', () => {
@@ -82,9 +82,9 @@ describe('Constants', () => {
   it('should have all expected supported models', () => {
     expect(SUPPORTED_MODELS).toContain('dall-e-2');
     expect(SUPPORTED_MODELS).toContain('dall-e-3');
-    expect(SUPPORTED_MODELS).toContain('gemini-2.0-flash');
-    expect(SUPPORTED_MODELS).toContain('gemini-2.5-flash');
-    expect(SUPPORTED_MODELS).toContain('gemini-2.5-pro');
+    expect(SUPPORTED_MODELS).toContain('gemini-3-pro-image-preview');
+    expect(SUPPORTED_MODELS).toContain('gemini-2.5-flash-image');
     expect(SUPPORTED_MODELS).toContain('gemini-2.0-flash-exp-image-generation');
+    expect(SUPPORTED_MODELS).toContain('imagen-4.0-generate-001');
   });
 });
