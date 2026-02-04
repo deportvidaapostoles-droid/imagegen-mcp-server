@@ -69,7 +69,7 @@ const TOOLS: Tool[] = [
   {
     name: "generate_image_gemini",
     description:
-      "Generate an image using Google's Gemini Imagen model. Returns the base64-encoded image data.",
+      "Generate an image using Google's Gemini Imagen model. Note: Requires Gemini 2.0 Flash Experimental model or Imagen model access. Returns image data.",
     inputSchema: {
       type: "object",
       properties: {
@@ -79,21 +79,15 @@ const TOOLS: Tool[] = [
         },
         model: {
           type: "string",
-          description: "The Gemini model to use for image generation",
-          default: "imagen-3.0-generate-001",
+          description: "The Gemini model to use. Use 'imagen-3.0-generate-001' for image generation or 'gemini-2.0-flash-exp' for experimental image generation",
+          default: "gemini-2.0-flash-exp",
         },
         number_of_images: {
           type: "number",
-          description: "The number of images to generate (1-4)",
+          description: "The number of images to generate (currently supports 1)",
           default: 1,
           minimum: 1,
-          maximum: 4,
-        },
-        aspect_ratio: {
-          type: "string",
-          description: "The aspect ratio of the generated image",
-          enum: ["1:1", "3:4", "4:3", "9:16", "16:9"],
-          default: "1:1",
+          maximum: 1,
         },
       },
       required: ["prompt"],
@@ -219,24 +213,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const {
         prompt,
-        model = "imagen-3.0-generate-001",
+        model = "gemini-2.0-flash-exp",
         number_of_images = 1,
-        aspect_ratio = "1:1",
       } = args as {
         prompt: string;
         model?: string;
         number_of_images?: number;
-        aspect_ratio?: string;
       };
 
       // Validate number of images
-      if (number_of_images < 1 || number_of_images > 4) {
-        throw new Error("number_of_images must be between 1 and 4");
+      if (number_of_images !== 1) {
+        throw new Error("Currently only 1 image generation is supported for Gemini");
       }
 
       const genModel = geminiClient.getGenerativeModel({ model });
 
-      // Generate content with text prompt
+      // Try to generate image using the model
+      // Note: This implementation depends on the specific Gemini model capabilities
+      // Some models may return inline image data, others may return URLs
       const result = await genModel.generateContent(prompt);
 
       const response = result.response;
@@ -246,9 +240,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error("No candidates returned from Gemini");
       }
 
-      // For now, return text response as Gemini's image generation API
-      // may require different approach based on model capabilities
-      const textResponse = response.text();
+      // Check if response contains inline image data
+      const images: Array<{ index: number; mimeType?: string; data?: string; text?: string }> = [];
+      
+      for (let candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
+        const candidate = candidates[candidateIdx];
+        if (candidate.content && candidate.content.parts) {
+          for (const part of candidate.content.parts) {
+            if (part.inlineData) {
+              // Image data found
+              images.push({
+                index: candidateIdx,
+                mimeType: part.inlineData.mimeType,
+                data: part.inlineData.data,
+              });
+            } else if (part.text) {
+              // Text response (model may not support image generation)
+              images.push({
+                index: candidateIdx,
+                text: part.text,
+              });
+            }
+          }
+        }
+      }
+
+      if (images.length === 0) {
+        throw new Error("No images or content were generated");
+      }
 
       return {
         content: [
@@ -258,8 +277,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               {
                 success: true,
                 model,
-                note: "Gemini image generation requires specific model configuration. Response:",
-                response: textResponse,
+                note: images[0].text 
+                  ? "Model returned text instead of image. Try using 'gemini-2.0-flash-exp' or ensure your API key has access to image generation models."
+                  : "Image generated successfully",
+                images,
               },
               null,
               2

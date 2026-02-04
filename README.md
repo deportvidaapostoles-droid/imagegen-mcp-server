@@ -28,15 +28,16 @@ Generate images using OpenAI's DALL-E models (DALL-E 2 and DALL-E 3).
 
 ### 2. Google Gemini Image Generation (`generate_image_gemini`)
 
-Generate images using Google's Gemini Imagen models.
+Generate images using Google's Gemini models with image generation capabilities.
+
+**Note**: Image generation in Gemini requires specific model access. The experimental `gemini-2.0-flash-exp` model may support image generation, but availability varies by API key and region.
 
 **Parameters:**
 - `prompt` (required): Text description of the desired image
-- `model` (optional): Model name (default: "imagen-3.0-generate-001")
-- `number_of_images` (optional): Number of images to generate (1-4, default: 1)
-- `aspect_ratio` (optional): "1:1", "3:4", "4:3", "9:16", or "16:9" (default: "1:1")
+- `model` (optional): Model name (default: "gemini-2.0-flash-exp")
+- `number_of_images` (optional): Number of images to generate (currently only supports 1)
 
-**Returns:** JSON with base64-encoded image data
+**Returns:** JSON with image data (base64-encoded) or text response if model doesn't support image generation
 
 ## Installation
 
@@ -131,11 +132,12 @@ await client.connect(transport);
   "name": "generate_image_gemini",
   "arguments": {
     "prompt": "A cute robot playing with a puppy in a park",
-    "aspect_ratio": "16:9",
-    "number_of_images": 2
+    "model": "gemini-2.0-flash-exp"
   }
 }
 ```
+
+**Note**: Gemini image generation support depends on your API key's access level and the specific model's capabilities.
 
 ## Development
 
