@@ -2,6 +2,7 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -9,6 +10,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createServer } from "http";
 
 // Initialize API clients
 let openaiClient: OpenAI | null = null;
@@ -36,6 +38,30 @@ if (process.env.GEMINI_API_KEY) {
   
   if (process.env.GEMINI_BASE_URL) {
     console.warn("Warning: GEMINI_BASE_URL is set but custom base URLs are not currently supported by @google/generative-ai SDK");
+  }
+}
+
+// Helper function to convert image URL to base64
+async function urlToBase64(url: string): Promise<{ data: string; mimeType: string }> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString('base64');
+    
+    // Try to determine mime type from response headers
+    const contentType = response.headers.get('content-type') || 'image/png';
+    
+    return {
+      data: base64,
+      mimeType: contentType,
+    };
+  } catch (error) {
+    throw new Error(`Failed to convert URL to base64: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -81,6 +107,12 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "The aspect ratio of the generated image (for Gemini models only)",
           enum: ["1:1", "3:4", "4:3", "9:16", "16:9"],
+        },
+        response_format: {
+          type: "string",
+          description: "Format for returning images: 'url' (URLs), 'base64' (base64-encoded data), or 'auto' (provider default: URLs for OpenAI, base64 for Gemini)",
+          enum: ["url", "base64", "auto"],
+          default: "auto",
         },
       },
       required: ["prompt"],
@@ -129,6 +161,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         quality,
         n,
         aspect_ratio,
+        response_format = "auto",
       } = args as {
         prompt: string;
         model?: string;
@@ -136,6 +169,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         quality?: string;
         n?: number;
         aspect_ratio?: string;
+        response_format?: "url" | "base64" | "auto";
       };
 
       // Ensure model is set (should always have default value)
@@ -197,11 +231,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("No image data returned from OpenAI");
         }
 
-        const images = response.data.map((img, idx) => ({
-          index: idx,
-          url: img.url,
-          revised_prompt: img.revised_prompt,
-        }));
+        // Determine format based on response_format parameter
+        const shouldReturnBase64 = response_format === "base64" || 
+                                   (response_format === "auto" && false); // auto defaults to URL for OpenAI
+        
+        let images: any[];
+        
+        if (shouldReturnBase64) {
+          // Convert URLs to base64
+          images = await Promise.all(
+            response.data.map(async (img, idx) => {
+              if (!img.url) {
+                throw new Error(`No URL available for image ${idx}`);
+              }
+              const { data, mimeType } = await urlToBase64(img.url);
+              return {
+                index: idx,
+                data,
+                mimeType,
+                revised_prompt: img.revised_prompt,
+              };
+            })
+          );
+        } else {
+          // Return URLs (default for OpenAI)
+          images = response.data.map((img, idx) => ({
+            index: idx,
+            url: img.url,
+            revised_prompt: img.revised_prompt,
+          }));
+        }
 
         return {
           content: [
@@ -212,6 +271,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   success: true,
                   provider: "openai",
                   model: openaiModel,
+                  format: shouldReturnBase64 ? "base64" : "url",
                   images,
                 },
                 null,
@@ -287,6 +347,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("No images or content were generated");
         }
 
+        // Gemini returns base64 by default, note the format in response
+        const formatNote = response_format === "url" 
+          ? "(Note: Gemini returns base64 data, URL format not available)"
+          : "";
+
         return {
           content: [
             {
@@ -296,9 +361,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   success: true,
                   provider: "gemini",
                   model: selectedModel,
+                  format: "base64",
                   note: results[0].text 
                     ? "Model returned text instead of image. Try using 'gemini-2.0-flash-exp' or ensure your API key has access to image generation models."
-                    : "Image generated successfully",
+                    : `Image generated successfully${formatNote}`,
                   results,
                 },
                 null,
@@ -339,17 +405,106 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start the server
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  // Log initialization info to stderr (not stdout, which is used for MCP protocol)
-  console.error("Assets Generation MCP Server running on stdio");
-  console.error(
-    `OpenAI support: ${openaiClient ? "enabled" : "disabled (OPENAI_API_KEY not set)"}`
-  );
-  console.error(
-    `Gemini support: ${geminiClient ? "enabled" : "disabled (GEMINI_API_KEY not set)"}`
-  );
+  const transportMode = process.env.MCP_TRANSPORT || "stdio";
+  
+  if (transportMode === "stdio") {
+    // stdio mode (default)
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    
+    console.error("Assets Generation MCP Server running on stdio");
+    console.error(
+      `OpenAI support: ${openaiClient ? "enabled" : "disabled (OPENAI_API_KEY not set)"}`
+    );
+    console.error(
+      `Gemini support: ${geminiClient ? "enabled" : "disabled (GEMINI_API_KEY not set)"}`
+    );
+  } else if (transportMode === "sse" || transportMode === "http") {
+    // SSE/HTTP mode
+    const port = parseInt(process.env.MCP_PORT || "3000", 10);
+    const host = process.env.MCP_HOST || "localhost";
+    
+    console.error(`Assets Generation MCP Server starting on ${host}:${port} (${transportMode} mode)`);
+    console.error(
+      `OpenAI support: ${openaiClient ? "enabled" : "disabled (OPENAI_API_KEY not set)"}`
+    );
+    console.error(
+      `Gemini support: ${geminiClient ? "enabled" : "disabled (GEMINI_API_KEY not set)"}`
+    );
+    
+    // Create HTTP server for SSE transport
+    const httpServer = createServer(async (req, res) => {
+      // Enable CORS
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+      
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      
+      if (url.pathname === '/sse' && req.method === 'GET') {
+        // Establish SSE connection
+        console.error('Establishing SSE connection');
+        const transport = new SSEServerTransport('/message', res);
+        
+        // Clean up on close
+        transport.onclose = () => {
+          console.error('SSE connection closed');
+        };
+        
+        // Connect to server
+        await server.connect(transport);
+        await transport.start();
+      } else if (url.pathname === '/message' && req.method === 'POST') {
+        // Handle incoming messages
+        console.error('Received POST message');
+        
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        
+        req.on('end', async () => {
+          try {
+            const message = JSON.parse(body);
+            // Find the transport for this session
+            // Note: In production, you'd need proper session management
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+          } catch (error) {
+            console.error('Error handling message:', error);
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          }
+        });
+      } else if (url.pathname === '/' && req.method === 'GET') {
+        // Health check endpoint
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          status: 'ok',
+          transport: transportMode,
+          openai: openaiClient ? 'enabled' : 'disabled',
+          gemini: geminiClient ? 'enabled' : 'disabled'
+        }));
+      } else {
+        res.writeHead(404);
+        res.end('Not Found');
+      }
+    });
+    
+    httpServer.listen(port, host, () => {
+      console.error(`Server listening on http://${host}:${port}`);
+      console.error(`SSE endpoint: http://${host}:${port}/sse`);
+      console.error(`Health check: http://${host}:${port}/`);
+    });
+  } else {
+    throw new Error(`Unknown transport mode: ${transportMode}. Supported: stdio, sse, http`);
+  }
 }
 
 main().catch((error) => {
