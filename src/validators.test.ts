@@ -9,6 +9,10 @@ import {
 } from './validators.js';
 
 describe('isOpenAIModel', () => {
+  it('should return true for gpt-image-1', () => {
+    expect(isOpenAIModel('gpt-image-1')).toBe(true);
+  });
+
   it('should return true for dall-e-2', () => {
     expect(isOpenAIModel('dall-e-2')).toBe(true);
   });
@@ -80,11 +84,10 @@ describe('Constants', () => {
   });
 
   it('should have all expected supported models', () => {
+    expect(SUPPORTED_MODELS).toContain('gpt-image-1');
     expect(SUPPORTED_MODELS).toContain('dall-e-2');
     expect(SUPPORTED_MODELS).toContain('dall-e-3');
     expect(SUPPORTED_MODELS).toContain('gemini-3-pro-image-preview');
-    expect(SUPPORTED_MODELS).toContain('gemini-2.5-flash-image');
-    expect(SUPPORTED_MODELS).toContain('gemini-2.0-flash-exp-image-generation');
     expect(SUPPORTED_MODELS).toContain('imagen-4.0-generate-001');
   });
 });

@@ -2,7 +2,7 @@
  * Validation functions for image generation parameters
  */
 
-export type OpenAIModel = 'dall-e-2' | 'dall-e-3';
+export type OpenAIModel = 'gpt-image-1' | 'dall-e-3' | 'dall-e-2';
 export type GeminiModel = 'gemini-3-pro-image-preview' | 'gemini-2.5-flash-image' | 'gemini-2.0-flash-exp-image-generation' | 'imagen-4.0-generate-001' | 'imagen-4.0-ultra-generate-001' | 'imagen-4.0-fast-generate-001';
 export type SupportedModel = OpenAIModel | GeminiModel;
 
@@ -15,8 +15,9 @@ export type AspectRatio = '1:1' | '3:4' | '4:3' | '9:16' | '16:9';
 export type ResponseFormat = 'url' | 'base64' | 'auto';
 
 export const SUPPORTED_MODELS = [
-  'dall-e-2',
+  'gpt-image-1',
   'dall-e-3',
+  'dall-e-2',
   'gemini-3-pro-image-preview',
   'gemini-2.5-flash-image',
   'gemini-2.0-flash-exp-image-generation',
@@ -32,7 +33,7 @@ export const DALLE2_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
  * Check if a model is an OpenAI model
  */
 export function isOpenAIModel(model: string): model is OpenAIModel {
-  return model.startsWith('dall-e');
+  return model.startsWith('dall-e') || model.startsWith('gpt-image');
 }
 
 /**

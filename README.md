@@ -19,18 +19,16 @@ An MCP (Model Context Protocol) server for AI-powered image generation. Supports
 Generate images using AI models. The provider (OpenAI or Gemini) is automatically selected based on the model parameter.
 
 **Supported Models:**
-- **OpenAI**: `dall-e-2`, `dall-e-3`
-- **Gemini**: `gemini-3-pro-image-preview` (default, recommended), `gemini-2.5-flash-image`, `gemini-2.0-flash-exp-image-generation`
-- **Imagen**: `imagen-4.0-generate-001`, `imagen-4.0-ultra-generate-001`, `imagen-4.0-fast-generate-001`
+- **OpenAI**: `gpt-image-1` (latest), `dall-e-3`, `dall-e-2`
+- **Gemini**: `gemini-3-pro-image-preview` (default, recommended), `gemini-2.5-flash-image`, `gemini-2.0-flash-exp-image-generation`, `imagen-4.0-generate-001`, `imagen-4.0-ultra-generate-001`, `imagen-4.0-fast-generate-001`
 
 > Run `npm run models` to list all available Gemini models from the API.
 
 **Parameters:**
 - `prompt` (required): Text description of the desired image
 - `model` (optional): Model name (default: "gemini-3-pro-image-preview")
-  - OpenAI: "dall-e-2", "dall-e-3"
-  - Gemini: "gemini-3-pro-image-preview", "gemini-2.5-flash-image", "gemini-2.0-flash-exp-image-generation"
-  - Imagen: "imagen-4.0-generate-001", "imagen-4.0-ultra-generate-001", "imagen-4.0-fast-generate-001"
+  - OpenAI: "gpt-image-1", "dall-e-3", "dall-e-2"
+  - Gemini: "gemini-3-pro-image-preview", "gemini-2.5-flash-image", "gemini-2.0-flash-exp-image-generation", "imagen-4.0-*"
 - `size` (optional, OpenAI only): Image size
   - DALL-E 3: "1024x1024", "1792x1024", "1024x1792"
   - DALL-E 2: "256x256", "512x512", "1024x1024"

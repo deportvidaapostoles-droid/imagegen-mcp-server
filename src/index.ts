@@ -176,12 +176,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const selectedModel = model || "gemini-3-pro-image-preview";
 
       // Determine provider based on model
-      const isOpenAI = selectedModel.startsWith("dall-e");
+      const isOpenAI = selectedModel.startsWith("dall-e") || selectedModel.startsWith("gpt-image");
       const isGemini = selectedModel.startsWith("gemini") || selectedModel.startsWith("imagen");
 
       if (!isOpenAI && !isGemini) {
         throw new Error(
-          `Unknown model: ${selectedModel}. Supported models: dall-e-2, dall-e-3, gemini-3-pro-image-preview, gemini-2.5-flash-image, gemini-2.0-flash-exp-image-generation. Run 'npm run models' to list all available models.`
+          `Unknown model: ${selectedModel}. Supported models: gpt-image-1, dall-e-3, dall-e-2, gemini-3-pro-image-preview, gemini-2.5-flash-image, imagen-4.0-*. Run 'npm run models' to list all available models.`
         );
       }
 
@@ -193,20 +193,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        const openaiModel = selectedModel as "dall-e-2" | "dall-e-3";
+        const openaiModel = selectedModel as "gpt-image-1" | "dall-e-3" | "dall-e-2";
         const openaiSize = size || "1024x1024";
         const openaiQuality = quality || "standard";
         const openaiN = n || 1;
 
         // Validate size for model
-        if (openaiModel === "dall-e-3") {
+        if (openaiModel === "dall-e-3" || openaiModel === "gpt-image-1") {
           if (!["1024x1024", "1792x1024", "1024x1792"].includes(openaiSize)) {
             throw new Error(
-              "For dall-e-3, size must be one of: 1024x1024, 1792x1024, 1024x1792"
+              "For dall-e-3/gpt-image-1, size must be one of: 1024x1024, 1792x1024, 1024x1792"
             );
           }
           if (openaiN !== 1) {
-            throw new Error("For dall-e-3, n must be 1");
+            throw new Error("For dall-e-3/gpt-image-1, n must be 1");
           }
         } else if (openaiModel === "dall-e-2") {
           if (!["256x256", "512x512", "1024x1024"].includes(openaiSize)) {

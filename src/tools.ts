@@ -20,10 +20,11 @@ export const GENERATE_IMAGE_TOOL: Tool = {
       },
       model: {
         type: "string",
-        description: "The model to use for image generation. OpenAI: 'dall-e-2', 'dall-e-3'. Gemini: 'gemini-3-pro-image-preview' (recommended), 'gemini-2.5-flash-image', 'gemini-2.0-flash-exp-image-generation'. Run 'npm run models' to list all available models.",
+        description: "The model to use for image generation. OpenAI: 'gpt-image-1' (latest), 'dall-e-3', 'dall-e-2'. Gemini: 'gemini-3-pro-image-preview' (recommended), 'gemini-2.5-flash-image', 'gemini-2.0-flash-exp-image-generation', 'imagen-4.0-generate-001', 'imagen-4.0-ultra-generate-001', 'imagen-4.0-fast-generate-001'. Run 'npm run models' to list all available models.",
         enum: [
-          "dall-e-2",
+          "gpt-image-1",
           "dall-e-3",
+          "dall-e-2",
           "gemini-3-pro-image-preview",
           "gemini-2.5-flash-image",
           "gemini-2.0-flash-exp-image-generation",
