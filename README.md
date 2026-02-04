@@ -7,6 +7,8 @@ An MCP (Model Context Protocol) server for AI-powered image generation. Supports
 - 🎨 **Multiple Providers**: Support for OpenAI DALL-E and Google Gemini
 - 🤖 **Auto-Detection**: Automatically selects the correct provider based on the model name
 - 🔧 **Flexible Configuration**: Customize model, size, quality, and other parameters
+- 🌐 **Multiple Transports**: Supports stdio, SSE (Server-Sent Events), and HTTP protocols
+- 📦 **Output Format Control**: Choose between URLs or base64-encoded images
 - 🚀 **Easy Integration**: Works seamlessly with MCP-compatible clients
 - 🔑 **Secure**: API keys managed through environment variables
 
@@ -34,9 +36,13 @@ Generate images using AI models. The provider (OpenAI or Gemini) is automaticall
   - Gemini: must be 1
 - `aspect_ratio` (optional, Gemini only): "1:1", "3:4", "4:3", "9:16", or "16:9"
   - Note: Aspect ratio is included in the prompt since it's not directly supported by the SDK API
+- `response_format` (optional): Output format for images
+  - "url": Return image URLs (default for OpenAI)
+  - "base64": Return base64-encoded image data
+  - "auto" (default): Use provider default (URLs for OpenAI, base64 for Gemini)
 
 **Returns:** 
-- OpenAI: JSON with image URLs and revised prompts
+- OpenAI: JSON with image URLs or base64 data (based on `response_format`)
 - Gemini: JSON with base64-encoded image data or text response if model doesn't support image generation
 
 **Note**: Image generation in Gemini requires specific model access. The experimental `gemini-2.0-flash-exp` model may support image generation, but availability varies by API key and region.
@@ -49,6 +55,8 @@ npm run build
 ```
 
 ## Configuration
+
+### API Keys
 
 Set up your API keys as environment variables:
 
@@ -68,6 +76,44 @@ export GEMINI_BASE_URL="https://your-custom-endpoint.com"
 
 You can enable one or both providers by setting the corresponding API keys.
 
+### Transport Modes
+
+The server supports multiple transport protocols:
+
+#### Stdio (Default)
+Standard input/output mode for direct integration with MCP clients:
+
+```bash
+# No environment variable needed, stdio is the default
+node dist/index.js
+```
+
+#### SSE (Server-Sent Events)
+HTTP-based transport using Server-Sent Events for real-time communication:
+
+```bash
+# Set transport mode and optional port
+export MCP_TRANSPORT=sse
+export MCP_PORT=3000  # Optional, defaults to 3000
+export MCP_HOST=localhost  # Optional, defaults to localhost
+
+node dist/index.js
+```
+
+Endpoints:
+- SSE stream: `GET http://localhost:3000/sse`
+- Message endpoint: `POST http://localhost:3000/message`
+- Health check: `GET http://localhost:3000/`
+
+#### HTTP/HTTPS
+Similar to SSE mode, suitable for HTTP-based integrations:
+
+```bash
+export MCP_TRANSPORT=http
+export MCP_PORT=3000
+node dist/index.js
+```
+
 ### Custom Base URLs
 
 You can override the default API endpoints:
@@ -77,7 +123,7 @@ You can override the default API endpoints:
 
 ## Usage
 
-### With Claude Desktop
+### With Claude Desktop (stdio mode)
 
 Add this to your Claude Desktop configuration file:
 
@@ -127,6 +173,52 @@ const client = new Client({
 await client.connect(transport);
 ```
 
+### With SSE/HTTP Mode
+
+When running in SSE or HTTP mode, you can integrate with web applications or other HTTP-based systems:
+
+```bash
+# Start the server in SSE mode
+export MCP_TRANSPORT=sse
+export MCP_PORT=3000
+export OPENAI_API_KEY="your-api-key"
+node dist/index.js
+```
+
+Then connect from your client application:
+
+```typescript
+// Health check
+const response = await fetch('http://localhost:3000/');
+const status = await response.json();
+console.log(status); // { status: 'ok', transport: 'sse', openai: 'enabled', ... }
+
+// Establish SSE connection
+const eventSource = new EventSource('http://localhost:3000/sse');
+eventSource.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  console.log('Received:', message);
+};
+
+// Send messages via POST
+await fetch('http://localhost:3000/message', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/call',
+    params: {
+      name: 'generate_image',
+      arguments: {
+        prompt: 'A beautiful landscape',
+        model: 'dall-e-3'
+      }
+    },
+    id: 1
+  })
+});
+```
+
 ## Examples
 
 ### Generate an image with DALL-E 3
@@ -169,6 +261,21 @@ await client.connect(transport);
   }
 }
 ```
+
+### Generate with custom output format
+
+```json
+{
+  "name": "generate_image",
+  "arguments": {
+    "prompt": "A beautiful sunset over the ocean",
+    "model": "dall-e-3",
+    "response_format": "base64"
+  }
+}
+```
+
+This will return base64-encoded image data instead of URLs (useful for direct embedding or when working in environments without internet access to fetch URLs).
 
 **Note**: The tool automatically detects the provider based on the model name. Gemini image generation support depends on your API key's access level and the specific model's capabilities.
 
