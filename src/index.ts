@@ -16,14 +16,27 @@ let geminiClient: GoogleGenerativeAI | null = null;
 
 // Initialize OpenAI if API key is provided
 if (process.env.OPENAI_API_KEY) {
-  openaiClient = new OpenAI({
+  const openaiConfig: any = {
     apiKey: process.env.OPENAI_API_KEY,
-  });
+  };
+  
+  // Allow users to override the base URL
+  if (process.env.OPENAI_BASE_URL) {
+    openaiConfig.baseURL = process.env.OPENAI_BASE_URL;
+  }
+  
+  openaiClient = new OpenAI(openaiConfig);
 }
 
 // Initialize Gemini if API key is provided
 if (process.env.GEMINI_API_KEY) {
+  // Note: GoogleGenerativeAI doesn't support custom baseUrl in the current SDK version
+  // This is a placeholder for future support. For now, users need to use proxy/redirect at network level
   geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  
+  if (process.env.GEMINI_BASE_URL) {
+    console.error("Warning: GEMINI_BASE_URL is set but custom base URLs are not currently supported by @google/generative-ai SDK");
+  }
 }
 
 // Define tools
@@ -88,6 +101,12 @@ const TOOLS: Tool[] = [
           default: 1,
           minimum: 1,
           maximum: 1,
+        },
+        aspect_ratio: {
+          type: "string",
+          description: "The aspect ratio of the generated image",
+          enum: ["1:1", "3:4", "4:3", "9:16", "16:9"],
+          default: "1:1",
         },
       },
       required: ["prompt"],
@@ -215,10 +234,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         prompt,
         model = "gemini-2.0-flash-exp",
         number_of_images = 1,
+        aspect_ratio = "1:1",
       } = args as {
         prompt: string;
         model?: string;
         number_of_images?: number;
+        aspect_ratio?: string;
       };
 
       // Validate number of images

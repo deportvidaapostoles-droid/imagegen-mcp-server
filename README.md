@@ -36,6 +36,7 @@ Generate images using Google's Gemini models with image generation capabilities.
 - `prompt` (required): Text description of the desired image
 - `model` (optional): Model name (default: "gemini-2.0-flash-exp")
 - `number_of_images` (optional): Number of images to generate (currently only supports 1)
+- `aspect_ratio` (optional): "1:1", "3:4", "4:3", "9:16", or "16:9" (default: "1:1")
 
 **Returns:** JSON with image data (base64-encoded) or text response if model doesn't support image generation
 
@@ -54,11 +55,24 @@ Set up your API keys as environment variables:
 # For OpenAI DALL-E support
 export OPENAI_API_KEY="your-openai-api-key"
 
+# Optional: Override OpenAI API base URL (e.g., for Azure OpenAI or proxies)
+export OPENAI_BASE_URL="https://your-custom-endpoint.com/v1"
+
 # For Google Gemini support
 export GEMINI_API_KEY="your-gemini-api-key"
+
+# Optional: Override Gemini API base URL (note: not fully supported in current SDK)
+export GEMINI_BASE_URL="https://your-custom-endpoint.com"
 ```
 
 You can enable one or both providers by setting the corresponding API keys.
+
+### Custom Base URLs
+
+You can override the default API endpoints:
+
+- **OpenAI**: Set `OPENAI_BASE_URL` to use Azure OpenAI, proxy servers, or custom endpoints
+- **Gemini**: Set `GEMINI_BASE_URL` (limited support - may require SDK updates for full functionality)
 
 ## Usage
 
@@ -77,12 +91,15 @@ Add this to your Claude Desktop configuration file:
       "args": ["/absolute/path/to/assets-gen-mcp/dist/index.js"],
       "env": {
         "OPENAI_API_KEY": "your-openai-api-key",
+        "OPENAI_BASE_URL": "https://your-custom-endpoint.com/v1",
         "GEMINI_API_KEY": "your-gemini-api-key"
       }
     }
   }
 }
 ```
+
+**Note:** The `OPENAI_BASE_URL` is optional and only needed if you want to use a custom endpoint (e.g., Azure OpenAI or a proxy).
 
 ### With MCP Client
 
@@ -132,7 +149,10 @@ await client.connect(transport);
   "name": "generate_image_gemini",
   "arguments": {
     "prompt": "A cute robot playing with a puppy in a park",
-    "model": "gemini-2.0-flash-exp"
+    "model": "gemini-2.0-flash-exp",
+    "aspect_ratio": "16:9"
+  }
+}
   }
 }
 ```

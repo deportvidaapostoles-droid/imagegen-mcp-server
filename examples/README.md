@@ -19,6 +19,7 @@ Add this to your Claude Desktop configuration:
       "args": ["/absolute/path/to/assets-gen-mcp/dist/index.js"],
       "env": {
         "OPENAI_API_KEY": "your-openai-api-key-here",
+        "OPENAI_BASE_URL": "https://api.openai.com/v1",
         "GEMINI_API_KEY": "your-gemini-api-key-here"
       }
     }
@@ -29,6 +30,7 @@ Add this to your Claude Desktop configuration:
 Replace:
 - `/absolute/path/to/assets-gen-mcp` with the actual path to your cloned repository
 - `your-openai-api-key-here` with your OpenAI API key (or remove this line if not using OpenAI)
+- `OPENAI_BASE_URL` is optional - only needed for custom endpoints like Azure OpenAI (or remove this line to use default)
 - `your-gemini-api-key-here` with your Google Gemini API key (or remove this line if not using Gemini)
 
 ## Getting API Keys
