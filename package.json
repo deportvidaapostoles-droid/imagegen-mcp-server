@@ -1,0 +1,36 @@
+{
+  "name": "assets-gen-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for image generation, supports OpenAI DALL-E and Google Gemini",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "assets-gen-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "watch": "tsc --watch"
+  },
+  "keywords": [
+    "mcp",
+    "image-generation",
+    "openai",
+    "gemini",
+    "dalle"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "openai": "^4.77.3",
+    "@google/generative-ai": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
