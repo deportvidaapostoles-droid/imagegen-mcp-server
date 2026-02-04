@@ -232,8 +232,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         // Determine format based on response_format parameter
-        const shouldReturnBase64 = response_format === "base64" || 
-                                   (response_format === "auto" && false); // auto defaults to URL for OpenAI
+        // auto defaults to URL for OpenAI (native format)
+        const shouldReturnBase64 = response_format === "base64";
         
         let images: any[];
         
@@ -347,9 +347,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("No images or content were generated");
         }
 
-        // Gemini returns base64 by default, note the format in response
+        // Gemini returns base64 by default
+        // Add a note if user requested URL format (not available for Gemini)
         const formatNote = response_format === "url" 
-          ? "(Note: Gemini returns base64 data, URL format not available)"
+          ? " (Note: Gemini returns base64 data, URL format not available)"
           : "";
 
         return {
@@ -432,6 +433,9 @@ async function main() {
       `Gemini support: ${geminiClient ? "enabled" : "disabled (GEMINI_API_KEY not set)"}`
     );
     
+    // Store transports by session ID for proper message routing
+    const transports = new Map<string, SSEServerTransport>();
+    
     // Create HTTP server for SSE transport
     const httpServer = createServer(async (req, res) => {
       // Enable CORS
@@ -451,15 +455,22 @@ async function main() {
         // Establish SSE connection
         console.error('Establishing SSE connection');
         const transport = new SSEServerTransport('/message', res);
+        const sessionId = transport.sessionId;
+        
+        // Store transport for message routing
+        transports.set(sessionId, transport);
         
         // Clean up on close
         transport.onclose = () => {
-          console.error('SSE connection closed');
+          console.error(`SSE connection closed for session ${sessionId}`);
+          transports.delete(sessionId);
         };
         
         // Connect to server
         await server.connect(transport);
         await transport.start();
+        
+        console.error(`SSE connection established with session ID: ${sessionId}`);
       } else if (url.pathname === '/message' && req.method === 'POST') {
         // Handle incoming messages
         console.error('Received POST message');
@@ -472,10 +483,22 @@ async function main() {
         req.on('end', async () => {
           try {
             const message = JSON.parse(body);
-            // Find the transport for this session
-            // Note: In production, you'd need proper session management
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true }));
+            
+            // Extract session ID from message or headers
+            // The SSE transport should include the session ID in the message or we can get it from URL params
+            const sessionId = url.searchParams.get('sessionId');
+            
+            if (sessionId && transports.has(sessionId)) {
+              const transport = transports.get(sessionId)!;
+              await transport.handlePostMessage(req, res, message);
+            } else {
+              // If no specific transport, this could be a stateless request
+              // For now, return error
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ 
+                error: 'No session found. Please establish SSE connection first or include sessionId parameter.' 
+              }));
+            }
           } catch (error) {
             console.error('Error handling message:', error);
             res.writeHead(400);
