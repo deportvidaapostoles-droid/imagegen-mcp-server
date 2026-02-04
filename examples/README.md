@@ -52,7 +52,8 @@ Replace:
 Once configured, you can ask Claude to:
 
 - "Generate an image of a sunset over mountains using DALL-E 3"
-- "Create an image of a futuristic city using OpenAI with HD quality"
-- "Generate an image using Gemini of a cat playing piano"
+- "Create an image of a futuristic city with DALL-E 2 in 512x512 size"
+- "Generate an image using Gemini model of a cat playing piano"
+- "Make an image with gemini-2.0-flash-exp in 16:9 aspect ratio showing a robot in a park"
 
-The MCP server will handle the API calls and return the generated images.
+The MCP server will automatically select the correct provider (OpenAI or Gemini) based on the model you specify, and handle the API calls to return the generated images.

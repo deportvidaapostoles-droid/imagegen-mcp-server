@@ -5,41 +5,41 @@ An MCP (Model Context Protocol) server for AI-powered image generation. Supports
 ## Features
 
 - 🎨 **Multiple Providers**: Support for OpenAI DALL-E and Google Gemini
+- 🤖 **Auto-Detection**: Automatically selects the correct provider based on the model name
 - 🔧 **Flexible Configuration**: Customize model, size, quality, and other parameters
 - 🚀 **Easy Integration**: Works seamlessly with MCP-compatible clients
 - 🔑 **Secure**: API keys managed through environment variables
 
-## Supported Tools
+## Supported Tool
 
-### 1. OpenAI DALL-E Image Generation (`generate_image_openai`)
+### `generate_image` - Unified Image Generation
 
-Generate images using OpenAI's DALL-E models (DALL-E 2 and DALL-E 3).
+Generate images using AI models. The provider (OpenAI or Gemini) is automatically selected based on the model parameter.
+
+**Supported Models:**
+- **OpenAI**: `dall-e-2`, `dall-e-3` (default)
+- **Gemini**: `gemini-2.0-flash-exp`, `imagen-3.0-generate-001`
 
 **Parameters:**
 - `prompt` (required): Text description of the desired image
-- `model` (optional): "dall-e-2" or "dall-e-3" (default: "dall-e-3")
-- `size` (optional): Image size
+- `model` (optional): Model name (default: "dall-e-3")
+  - OpenAI models: "dall-e-2", "dall-e-3"
+  - Gemini models: "gemini-2.0-flash-exp", "imagen-3.0-generate-001"
+- `size` (optional, OpenAI only): Image size
   - DALL-E 3: "1024x1024", "1792x1024", "1024x1792"
   - DALL-E 2: "256x256", "512x512", "1024x1024"
-- `quality` (optional): "standard" or "hd" (DALL-E 3 only)
-- `n` (optional): Number of images (1-10 for DALL-E 2, must be 1 for DALL-E 3)
-
-**Returns:** JSON with image URLs and revised prompts
-
-### 2. Google Gemini Image Generation (`generate_image_gemini`)
-
-Generate images using Google's Gemini models with image generation capabilities.
-
-**Note**: Image generation in Gemini requires specific model access. The experimental `gemini-2.0-flash-exp` model may support image generation, but availability varies by API key and region.
-
-**Parameters:**
-- `prompt` (required): Text description of the desired image
-- `model` (optional): Model name (default: "gemini-2.0-flash-exp")
-- `number_of_images` (optional): Number of images to generate (currently only supports 1)
-- `aspect_ratio` (optional): "1:1", "3:4", "4:3", "9:16", or "16:9" (default: "1:1")
+- `quality` (optional, OpenAI only): "standard" or "hd" (DALL-E 3 only)
+- `n` (optional): Number of images to generate
+  - OpenAI: 1-10 for DALL-E 2, must be 1 for DALL-E 3
+  - Gemini: must be 1
+- `aspect_ratio` (optional, Gemini only): "1:1", "3:4", "4:3", "9:16", or "16:9"
   - Note: Aspect ratio is included in the prompt since it's not directly supported by the SDK API
 
-**Returns:** JSON with image data (base64-encoded) or text response if model doesn't support image generation
+**Returns:** 
+- OpenAI: JSON with image URLs and revised prompts
+- Gemini: JSON with base64-encoded image data or text response if model doesn't support image generation
+
+**Note**: Image generation in Gemini requires specific model access. The experimental `gemini-2.0-flash-exp` model may support image generation, but availability varies by API key and region.
 
 ## Installation
 
@@ -133,7 +133,7 @@ await client.connect(transport);
 
 ```json
 {
-  "name": "generate_image_openai",
+  "name": "generate_image",
   "arguments": {
     "prompt": "A serene mountain landscape at sunset with a lake reflection",
     "model": "dall-e-3",
@@ -143,22 +143,34 @@ await client.connect(transport);
 }
 ```
 
+### Generate an image with DALL-E 2
+
+```json
+{
+  "name": "generate_image",
+  "arguments": {
+    "prompt": "A futuristic city skyline",
+    "model": "dall-e-2",
+    "size": "512x512",
+    "n": 2
+  }
+}
+```
+
 ### Generate an image with Gemini
 
 ```json
 {
-  "name": "generate_image_gemini",
+  "name": "generate_image",
   "arguments": {
     "prompt": "A cute robot playing with a puppy in a park",
     "model": "gemini-2.0-flash-exp",
     "aspect_ratio": "16:9"
   }
 }
-  }
-}
 ```
 
-**Note**: Gemini image generation support depends on your API key's access level and the specific model's capabilities.
+**Note**: The tool automatically detects the provider based on the model name. Gemini image generation support depends on your API key's access level and the specific model's capabilities.
 
 ## Development
 

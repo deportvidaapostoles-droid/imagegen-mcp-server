@@ -42,9 +42,9 @@ if (process.env.GEMINI_API_KEY) {
 // Define tools
 const TOOLS: Tool[] = [
   {
-    name: "generate_image_openai",
+    name: "generate_image",
     description:
-      "Generate an image using OpenAI's DALL-E model. Returns the URL of the generated image.",
+      "Generate an image using AI models (OpenAI DALL-E or Google Gemini). The provider is automatically selected based on the model parameter.",
     inputSchema: {
       type: "object",
       properties: {
@@ -54,59 +54,33 @@ const TOOLS: Tool[] = [
         },
         model: {
           type: "string",
-          description: "The model to use for image generation",
-          enum: ["dall-e-2", "dall-e-3"],
+          description: "The model to use for image generation. OpenAI models: 'dall-e-2', 'dall-e-3'. Gemini models: 'gemini-2.0-flash-exp', 'imagen-3.0-generate-001'",
+          enum: [
+            "dall-e-2",
+            "dall-e-3",
+            "gemini-2.0-flash-exp",
+            "imagen-3.0-generate-001",
+          ],
           default: "dall-e-3",
         },
         size: {
           type: "string",
-          description: "The size of the generated image",
+          description: "The size of the generated image (for OpenAI models only)",
           enum: ["256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"],
-          default: "1024x1024",
         },
         quality: {
           type: "string",
           description: "The quality of the image (only for dall-e-3)",
           enum: ["standard", "hd"],
-          default: "standard",
         },
         n: {
           type: "number",
-          description: "The number of images to generate (1-10 for dall-e-2, only 1 for dall-e-3)",
-          default: 1,
-        },
-      },
-      required: ["prompt"],
-    },
-  },
-  {
-    name: "generate_image_gemini",
-    description:
-      "Generate an image using Google's Gemini Imagen model. Note: Requires Gemini 2.0 Flash Experimental model or Imagen model access. Returns image data.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        prompt: {
-          type: "string",
-          description: "A text description of the desired image",
-        },
-        model: {
-          type: "string",
-          description: "The Gemini model to use. Use 'imagen-3.0-generate-001' for image generation or 'gemini-2.0-flash-exp' for experimental image generation",
-          default: "gemini-2.0-flash-exp",
-        },
-        number_of_images: {
-          type: "number",
-          description: "The number of images to generate (currently supports 1)",
-          default: 1,
-          minimum: 1,
-          maximum: 1,
+          description: "The number of images to generate (for OpenAI: 1-10 for dall-e-2, 1 for dall-e-3; for Gemini: only 1)",
         },
         aspect_ratio: {
           type: "string",
-          description: "The aspect ratio of the generated image",
+          description: "The aspect ratio of the generated image (for Gemini models only)",
           enum: ["1:1", "3:4", "4:3", "9:16", "16:9"],
-          default: "1:1",
         },
       },
       required: ["prompt"],
@@ -147,174 +121,193 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    if (name === "generate_image_openai") {
-      if (!openaiClient) {
-        throw new Error(
-          "OpenAI client not initialized. Please set OPENAI_API_KEY environment variable."
-        );
-      }
-
+    if (name === "generate_image") {
       const {
         prompt,
         model = "dall-e-3",
-        size = "1024x1024",
-        quality = "standard",
-        n = 1,
-      } = args as {
-        prompt: string;
-        model?: "dall-e-2" | "dall-e-3";
-        size?: "256x256" | "512x512" | "1024x1024" | "1792x1024" | "1024x1792";
-        quality?: "standard" | "hd";
-        n?: number;
-      };
-
-      // Validate size for model
-      if (model === "dall-e-3") {
-        if (!["1024x1024", "1792x1024", "1024x1792"].includes(size)) {
-          throw new Error(
-            "For dall-e-3, size must be one of: 1024x1024, 1792x1024, 1024x1792"
-          );
-        }
-        if (n !== 1) {
-          throw new Error("For dall-e-3, n must be 1");
-        }
-      } else if (model === "dall-e-2") {
-        if (!["256x256", "512x512", "1024x1024"].includes(size)) {
-          throw new Error(
-            "For dall-e-2, size must be one of: 256x256, 512x512, 1024x1024"
-          );
-        }
-        if (quality === "hd") {
-          throw new Error("Quality 'hd' is only available for dall-e-3");
-        }
-      }
-
-      const response = await openaiClient.images.generate({
-        model,
-        prompt,
-        n,
         size,
-        quality: model === "dall-e-3" ? quality : undefined,
-      });
-
-      if (!response.data) {
-        throw new Error("No image data returned from OpenAI");
-      }
-
-      const images = response.data.map((img, idx) => ({
-        index: idx,
-        url: img.url,
-        revised_prompt: img.revised_prompt,
-      }));
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              {
-                success: true,
-                model,
-                images,
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
-    } else if (name === "generate_image_gemini") {
-      if (!geminiClient) {
-        throw new Error(
-          "Gemini client not initialized. Please set GEMINI_API_KEY environment variable."
-        );
-      }
-
-      const {
-        prompt,
-        model = "gemini-2.0-flash-exp",
-        number_of_images = 1,
-        aspect_ratio = "1:1",
+        quality,
+        n,
+        aspect_ratio,
       } = args as {
         prompt: string;
         model?: string;
-        number_of_images?: number;
+        size?: string;
+        quality?: string;
+        n?: number;
         aspect_ratio?: string;
       };
 
-      // Validate number of images
-      if (number_of_images !== 1) {
-        throw new Error("Currently only 1 image generation is supported for Gemini");
+      // Determine provider based on model
+      const isOpenAI = model.startsWith("dall-e");
+      const isGemini = model.startsWith("gemini") || model.startsWith("imagen");
+
+      if (!isOpenAI && !isGemini) {
+        throw new Error(
+          `Unknown model: ${model}. Supported models: dall-e-2, dall-e-3, gemini-2.0-flash-exp, imagen-3.0-generate-001`
+        );
       }
 
-      const genModel = geminiClient.getGenerativeModel({ model });
+      // Handle OpenAI models
+      if (isOpenAI) {
+        if (!openaiClient) {
+          throw new Error(
+            "OpenAI client not initialized. Please set OPENAI_API_KEY environment variable."
+          );
+        }
 
-      // Try to generate image using the model
-      // Note: This implementation depends on the specific Gemini model capabilities
-      // Some models may return inline image data, others may return URLs
-      // The aspect_ratio parameter is included in the prompt since it's not directly supported
-      // by all models through the SDK API
-      const promptWithAspectRatio = aspect_ratio !== "1:1" 
-        ? `${prompt} (aspect ratio: ${aspect_ratio})`
-        : prompt;
-      
-      const result = await genModel.generateContent(promptWithAspectRatio);
+        const openaiModel = model as "dall-e-2" | "dall-e-3";
+        const openaiSize = size || "1024x1024";
+        const openaiQuality = quality || "standard";
+        const openaiN = n || 1;
 
-      const response = result.response;
-      const candidates = response.candidates;
+        // Validate size for model
+        if (openaiModel === "dall-e-3") {
+          if (!["1024x1024", "1792x1024", "1024x1792"].includes(openaiSize)) {
+            throw new Error(
+              "For dall-e-3, size must be one of: 1024x1024, 1792x1024, 1024x1792"
+            );
+          }
+          if (openaiN !== 1) {
+            throw new Error("For dall-e-3, n must be 1");
+          }
+        } else if (openaiModel === "dall-e-2") {
+          if (!["256x256", "512x512", "1024x1024"].includes(openaiSize)) {
+            throw new Error(
+              "For dall-e-2, size must be one of: 256x256, 512x512, 1024x1024"
+            );
+          }
+          if (openaiQuality === "hd") {
+            throw new Error("Quality 'hd' is only available for dall-e-3");
+          }
+        }
 
-      if (!candidates || candidates.length === 0) {
-        throw new Error("No candidates returned from Gemini");
+        const response = await openaiClient.images.generate({
+          model: openaiModel,
+          prompt,
+          n: openaiN,
+          size: openaiSize as any,
+          quality: openaiModel === "dall-e-3" ? (openaiQuality as any) : undefined,
+        });
+
+        if (!response.data) {
+          throw new Error("No image data returned from OpenAI");
+        }
+
+        const images = response.data.map((img, idx) => ({
+          index: idx,
+          url: img.url,
+          revised_prompt: img.revised_prompt,
+        }));
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  success: true,
+                  provider: "openai",
+                  model: openaiModel,
+                  images,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
       }
 
-      // Check if response contains inline image data or text
-      const results: Array<{ index: number; mimeType?: string; data?: string; text?: string }> = [];
-      
-      for (let candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
-        const candidate = candidates[candidateIdx];
-        if (candidate.content && candidate.content.parts) {
-          for (const part of candidate.content.parts) {
-            if (part.inlineData) {
-              // Image data found
-              results.push({
-                index: candidateIdx,
-                mimeType: part.inlineData.mimeType,
-                data: part.inlineData.data,
-              });
-            } else if (part.text) {
-              // Text response (model may not support image generation)
-              results.push({
-                index: candidateIdx,
-                text: part.text,
-              });
+      // Handle Gemini models
+      if (isGemini) {
+        if (!geminiClient) {
+          throw new Error(
+            "Gemini client not initialized. Please set GEMINI_API_KEY environment variable."
+          );
+        }
+
+        const geminiN = n || 1;
+        const geminiAspectRatio = aspect_ratio || "1:1";
+
+        // Validate number of images
+        if (geminiN !== 1) {
+          throw new Error("Currently only 1 image generation is supported for Gemini");
+        }
+
+        const genModel = geminiClient.getGenerativeModel({ model });
+
+        // Try to generate image using the model
+        // Note: This implementation depends on the specific Gemini model capabilities
+        // Some models may return inline image data, others may return URLs
+        // The aspect_ratio parameter is included in the prompt since it's not directly supported
+        // by all models through the SDK API
+        const promptWithAspectRatio = geminiAspectRatio !== "1:1" 
+          ? `${prompt} (aspect ratio: ${geminiAspectRatio})`
+          : prompt;
+        
+        const result = await genModel.generateContent(promptWithAspectRatio);
+
+        const response = result.response;
+        const candidates = response.candidates;
+
+        if (!candidates || candidates.length === 0) {
+          throw new Error("No candidates returned from Gemini");
+        }
+
+        // Check if response contains inline image data or text
+        const results: Array<{ index: number; mimeType?: string; data?: string; text?: string }> = [];
+        
+        for (let candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
+          const candidate = candidates[candidateIdx];
+          if (candidate.content && candidate.content.parts) {
+            for (const part of candidate.content.parts) {
+              if (part.inlineData) {
+                // Image data found
+                results.push({
+                  index: candidateIdx,
+                  mimeType: part.inlineData.mimeType,
+                  data: part.inlineData.data,
+                });
+              } else if (part.text) {
+                // Text response (model may not support image generation)
+                results.push({
+                  index: candidateIdx,
+                  text: part.text,
+                });
+              }
             }
           }
         }
+
+        if (results.length === 0) {
+          throw new Error("No images or content were generated");
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  success: true,
+                  provider: "gemini",
+                  model,
+                  note: results[0].text 
+                    ? "Model returned text instead of image. Try using 'gemini-2.0-flash-exp' or ensure your API key has access to image generation models."
+                    : "Image generated successfully",
+                  results,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
       }
 
-      if (results.length === 0) {
-        throw new Error("No images or content were generated");
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              {
-                success: true,
-                model,
-                note: results[0].text 
-                  ? "Model returned text instead of image. Try using 'gemini-2.0-flash-exp' or ensure your API key has access to image generation models."
-                  : "Image generated successfully",
-                results,
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
+      // This should never be reached
+      throw new Error("Invalid provider state");
     } else {
       throw new Error(`Unknown tool: ${name}`);
     }
