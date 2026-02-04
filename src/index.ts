@@ -156,7 +156,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "generate_image") {
       const {
         prompt,
-        model = "dall-e-3",
+        model = "gemini-2.0-flash",
         size,
         quality,
         n,
@@ -173,7 +173,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
 
       // Ensure model is set (should always have default value)
-      const selectedModel = model || "dall-e-3";
+      const selectedModel = model || "gemini-2.0-flash";
 
       // Determine provider based on model
       const isOpenAI = selectedModel.startsWith("dall-e");
@@ -181,7 +181,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       if (!isOpenAI && !isGemini) {
         throw new Error(
-          `Unknown model: ${selectedModel}. Supported models: dall-e-2, dall-e-3, gemini-2.0-flash-exp, imagen-3.0-generate-001`
+          `Unknown model: ${selectedModel}. Supported models: dall-e-2, dall-e-3, gemini-2.0-flash, gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash-exp-image-generation. Run 'npm run models' to list all available models.`
         );
       }
 

@@ -5,3 +5,7 @@ dist/
 .env
 .vscode/
 *.tsbuildinfo
+coverage/
+.serena/
+.sisyphus/
+nul

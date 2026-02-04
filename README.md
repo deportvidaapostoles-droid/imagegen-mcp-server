@@ -19,14 +19,16 @@ An MCP (Model Context Protocol) server for AI-powered image generation. Supports
 Generate images using AI models. The provider (OpenAI or Gemini) is automatically selected based on the model parameter.
 
 **Supported Models:**
-- **OpenAI**: `dall-e-2`, `dall-e-3` (default)
-- **Gemini**: `gemini-2.0-flash-exp`, `imagen-3.0-generate-001`
+- **OpenAI**: `dall-e-2`, `dall-e-3`
+- **Gemini**: `gemini-2.0-flash` (default, recommended), `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash-exp-image-generation`
+
+> Run `npm run models` to list all available Gemini models from the API.
 
 **Parameters:**
 - `prompt` (required): Text description of the desired image
-- `model` (optional): Model name (default: "dall-e-3")
+- `model` (optional): Model name (default: "gemini-2.0-flash")
   - OpenAI models: "dall-e-2", "dall-e-3"
-  - Gemini models: "gemini-2.0-flash-exp", "imagen-3.0-generate-001"
+  - Gemini models: "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash-exp-image-generation"
 - `size` (optional, OpenAI only): Image size
   - DALL-E 3: "1024x1024", "1792x1024", "1024x1792"
   - DALL-E 2: "256x256", "512x512", "1024x1024"
@@ -256,7 +258,7 @@ await fetch('http://localhost:3000/message', {
   "name": "generate_image",
   "arguments": {
     "prompt": "A cute robot playing with a puppy in a park",
-    "model": "gemini-2.0-flash-exp",
+    "model": "gemini-2.0-flash",
     "aspect_ratio": "16:9"
   }
 }

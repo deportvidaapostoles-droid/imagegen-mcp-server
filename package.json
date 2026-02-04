@@ -7,10 +7,15 @@
   "bin": {
     "assets-gen-mcp": "dist/index.js"
   },
-  "scripts": {
+"scripts": {
     "build": "tsc",
     "prepare": "npm run build",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "models": "npx tsx src/list-models.ts",
+    "test": "vitest run --exclude src/integration.test.ts",
+    "test:watch": "vitest --exclude src/integration.test.ts",
+    "test:coverage": "vitest run --coverage --exclude src/integration.test.ts",
+    "test:integration": "vitest run src/integration.test.ts"
   },
   "keywords": [
     "mcp",
@@ -22,13 +27,16 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "openai": "^4.77.3",
-    "@google/generative-ai": "^0.21.0"
+    "openai": "^4.77.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "typescript": "^5.7.2"
+    "@vitest/coverage-v8": "^4.0.18",
+    "dotenv": "^17.2.3",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=18"
