@@ -138,13 +138,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         aspect_ratio?: string;
       };
 
+      // Ensure model is set (should always have default value)
+      const selectedModel = model || "dall-e-3";
+
       // Determine provider based on model
-      const isOpenAI = model.startsWith("dall-e");
-      const isGemini = model.startsWith("gemini") || model.startsWith("imagen");
+      const isOpenAI = selectedModel.startsWith("dall-e");
+      const isGemini = selectedModel.startsWith("gemini") || selectedModel.startsWith("imagen");
 
       if (!isOpenAI && !isGemini) {
         throw new Error(
-          `Unknown model: ${model}. Supported models: dall-e-2, dall-e-3, gemini-2.0-flash-exp, imagen-3.0-generate-001`
+          `Unknown model: ${selectedModel}. Supported models: dall-e-2, dall-e-3, gemini-2.0-flash-exp, imagen-3.0-generate-001`
         );
       }
 
@@ -156,7 +159,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           );
         }
 
-        const openaiModel = model as "dall-e-2" | "dall-e-3";
+        const openaiModel = selectedModel as "dall-e-2" | "dall-e-3";
         const openaiSize = size || "1024x1024";
         const openaiQuality = quality || "standard";
         const openaiN = n || 1;
@@ -235,7 +238,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("Currently only 1 image generation is supported for Gemini");
         }
 
-        const genModel = geminiClient.getGenerativeModel({ model });
+        const genModel = geminiClient.getGenerativeModel({ model: selectedModel });
 
         // Try to generate image using the model
         // Note: This implementation depends on the specific Gemini model capabilities
@@ -292,7 +295,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 {
                   success: true,
                   provider: "gemini",
-                  model,
+                  model: selectedModel,
                   note: results[0].text 
                     ? "Model returned text instead of image. Try using 'gemini-2.0-flash-exp' or ensure your API key has access to image generation models."
                     : "Image generated successfully",
@@ -306,7 +309,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      // This should never be reached
+      // Safety check: This should never be reached due to validation above
+      // but included for type safety and defensive programming
       throw new Error("Invalid provider state");
     } else {
       throw new Error(`Unknown tool: ${name}`);
