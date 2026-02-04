@@ -240,8 +240,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error("No candidates returned from Gemini");
       }
 
-      // Check if response contains inline image data
-      const images: Array<{ index: number; mimeType?: string; data?: string; text?: string }> = [];
+      // Check if response contains inline image data or text
+      const results: Array<{ index: number; mimeType?: string; data?: string; text?: string }> = [];
       
       for (let candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
         const candidate = candidates[candidateIdx];
@@ -249,14 +249,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           for (const part of candidate.content.parts) {
             if (part.inlineData) {
               // Image data found
-              images.push({
+              results.push({
                 index: candidateIdx,
                 mimeType: part.inlineData.mimeType,
                 data: part.inlineData.data,
               });
             } else if (part.text) {
               // Text response (model may not support image generation)
-              images.push({
+              results.push({
                 index: candidateIdx,
                 text: part.text,
               });
@@ -265,7 +265,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
 
-      if (images.length === 0) {
+      if (results.length === 0) {
         throw new Error("No images or content were generated");
       }
 
@@ -277,10 +277,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               {
                 success: true,
                 model,
-                note: images[0].text 
+                note: results[0].text 
                   ? "Model returned text instead of image. Try using 'gemini-2.0-flash-exp' or ensure your API key has access to image generation models."
                   : "Image generated successfully",
-                images,
+                results,
               },
               null,
               2
