@@ -7,14 +7,16 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   Tool,
+  TextContent,
+  ImageContent,
 } from "@modelcontextprotocol/sdk/types.js";
 import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { createServer } from "http";
 
 // Initialize API clients
 let openaiClient: OpenAI | null = null;
-let geminiClient: GoogleGenerativeAI | null = null;
+let geminiClient: GoogleGenAI | null = null;
 
 // Initialize OpenAI if API key is provided
 if (process.env.OPENAI_API_KEY) {
@@ -32,13 +34,10 @@ if (process.env.OPENAI_API_KEY) {
 
 // Initialize Gemini if API key is provided
 if (process.env.GEMINI_API_KEY) {
-  // Note: GoogleGenerativeAI doesn't support custom baseUrl in the current SDK version
-  // This is a placeholder for future support. For now, users need to use proxy/redirect at network level
-  geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  
-  if (process.env.GEMINI_BASE_URL) {
-    console.warn("Warning: GEMINI_BASE_URL is set but custom base URLs are not currently supported by @google/generative-ai SDK");
-  }
+  geminiClient = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: process.env.GEMINI_BASE_URL ? { baseUrl: process.env.GEMINI_BASE_URL } : undefined,
+  });
 }
 
 // Helper function to convert image URL to base64
@@ -64,6 +63,8 @@ async function urlToBase64(url: string): Promise<{ data: string; mimeType: strin
     throw new Error(`Failed to convert URL to base64: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gemini-2.5-flash-image";
 
 // Define tools
 const TOOLS: Tool[] = [
@@ -135,17 +136,11 @@ const server = new Server(
 
 // Handle list tools request
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const availableTools: Tool[] = [];
-
-  if (openaiClient) {
-    availableTools.push(TOOLS[0]); // OpenAI tool
+  // Only expose the generate_image tool if at least one provider is available
+  if (openaiClient || geminiClient) {
+    return { tools: TOOLS };
   }
-
-  if (geminiClient) {
-    availableTools.push(TOOLS[1]); // Gemini tool
-  }
-
-  return { tools: availableTools };
+  return { tools: [] };
 });
 
 // Handle tool execution
@@ -156,7 +151,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "generate_image") {
       const {
         prompt,
-        model = "gemini-3-pro-image-preview",
+        model = DEFAULT_MODEL,
         size,
         quality,
         n,
@@ -173,7 +168,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
 
       // Ensure model is set (should always have default value)
-      const selectedModel = model || "gemini-3-pro-image-preview";
+      const selectedModel = model || DEFAULT_MODEL;
 
       // Determine provider based on model
       const isOpenAI = selectedModel.startsWith("dall-e") || selectedModel.startsWith("gpt-image");
@@ -231,55 +226,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("No image data returned from OpenAI");
         }
 
-        // Determine format based on response_format parameter
-        // auto defaults to URL for OpenAI (native format)
-        const shouldReturnBase64 = response_format === "base64";
-        
-        let images: any[];
-        
-        if (shouldReturnBase64) {
-          // Convert URLs to base64
-          images = await Promise.all(
-            response.data.map(async (img, idx) => {
-              if (!img.url) {
-                throw new Error(`No URL available for image ${idx}`);
-              }
-              const { data, mimeType } = await urlToBase64(img.url);
-              return {
-                index: idx,
-                data,
-                mimeType,
-                revised_prompt: img.revised_prompt,
-              };
-            })
-          );
-        } else {
-          // Return URLs (default for OpenAI)
-          images = response.data.map((img, idx) => ({
-            index: idx,
-            url: img.url,
-            revised_prompt: img.revised_prompt,
-          }));
+        // Build MCP content blocks
+        const content: (TextContent | ImageContent)[] = [];
+
+        // Add metadata as text
+        const revisedPrompt = response.data[0]?.revised_prompt;
+        if (revisedPrompt) {
+          content.push({ type: "text", text: `Revised prompt: ${revisedPrompt}` });
         }
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  success: true,
-                  provider: "openai",
-                  model: openaiModel,
-                  format: shouldReturnBase64 ? "base64" : "url",
-                  images,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        // Convert all images to MCP ImageContent
+        for (const img of response.data) {
+          if (!img.url) continue;
+          const { data, mimeType } = await urlToBase64(img.url);
+          content.push({ type: "image", data, mimeType });
+        }
+
+        return { content };
       }
 
       // Handle Gemini models
@@ -298,21 +261,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("Currently only 1 image generation is supported for Gemini");
         }
 
-        const genModel = geminiClient.getGenerativeModel({ model: selectedModel });
-
-        // Try to generate image using the model
-        // Note: This implementation depends on the specific Gemini model capabilities
-        // Some models may return inline image data, others may return URLs
-        // The aspect_ratio parameter is included in the prompt since it's not directly supported
-        // by all models through the SDK API
         const promptWithAspectRatio = geminiAspectRatio !== "1:1" 
           ? `${prompt} (aspect ratio: ${geminiAspectRatio})`
           : prompt;
         
-        const result = await genModel.generateContent(promptWithAspectRatio);
+        const result = await geminiClient.models.generateContent({
+          model: selectedModel,
+          contents: promptWithAspectRatio,
+        });
 
-        const response = result.response;
-        const candidates = response.candidates;
+        const candidates = result.candidates;
 
         if (!candidates || candidates.length === 0) {
           throw new Error("No candidates returned from Gemini");
@@ -326,14 +284,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (candidate.content && candidate.content.parts) {
             for (const part of candidate.content.parts) {
               if (part.inlineData) {
-                // Image data found
                 results.push({
                   index: candidateIdx,
                   mimeType: part.inlineData.mimeType,
                   data: part.inlineData.data,
                 });
               } else if (part.text) {
-                // Text response (model may not support image generation)
                 results.push({
                   index: candidateIdx,
                   text: part.text,
@@ -347,33 +303,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("No images or content were generated");
         }
 
-        // Gemini returns base64 by default
-        // Add a note if user requested URL format (not available for Gemini)
-        const formatNote = response_format === "url" 
-          ? " (Note: Gemini returns base64 data, URL format not available)"
-          : "";
+        // Build MCP content blocks
+        const content: (TextContent | ImageContent)[] = [];
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  success: true,
-                  provider: "gemini",
-                  model: selectedModel,
-                  format: "base64",
-                  note: results[0].text 
-                    ? "Model returned text instead of image. Try using 'gemini-2.0-flash-exp' or ensure your API key has access to image generation models."
-                    : `Image generated successfully${formatNote}`,
-                  results,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        for (const r of results) {
+          if (r.data && r.mimeType) {
+            content.push({ type: "image", data: r.data, mimeType: r.mimeType });
+          } else if (r.text) {
+            content.push({ type: "text", text: r.text });
+          }
+        }
+
+        return { content };
       }
 
       // Safety check: This should never be reached due to validation above
@@ -466,9 +407,8 @@ async function main() {
           transports.delete(sessionId);
         };
         
-        // Connect to server
+        // Connect to server (connect() calls start() automatically)
         await server.connect(transport);
-        await transport.start();
         
         console.error(`SSE connection established with session ID: ${sessionId}`);
       } else if (url.pathname === '/message' && req.method === 'POST') {

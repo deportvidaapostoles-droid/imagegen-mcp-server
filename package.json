@@ -7,7 +7,7 @@
   "bin": {
     "assets-gen-mcp": "dist/index.js"
   },
-"scripts": {
+  "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
     "watch": "tsc --watch",
@@ -27,7 +27,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
+    "@google/genai": "^1.42.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "openai": "^4.77.3"
   },
