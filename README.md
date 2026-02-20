@@ -1,156 +1,77 @@
 # Assets Generation MCP Server
 
-An MCP (Model Context Protocol) server for AI-powered image generation. Supports multiple providers including OpenAI's DALL-E and Google's Gemini Imagen models.
+AI 图片生成 MCP 服务器，支持 OpenAI DALL-E 和 Google Gemini 双 provider，返回标准 MCP `ImageContent`。
 
-## Features
+## 特性
 
-- 🎨 **Multiple Providers**: Support for OpenAI DALL-E and Google Gemini
-- 🤖 **Auto-Detection**: Automatically selects the correct provider based on the model name
-- 🔧 **Flexible Configuration**: Customize model, size, quality, and other parameters
-- 🌐 **Multiple Transports**: Supports stdio, SSE (Server-Sent Events), and HTTP protocols
-- 📦 **Output Format Control**: Choose between URLs or base64-encoded images
-- 🚀 **Easy Integration**: Works seamlessly with MCP-compatible clients
-- 🔑 **Secure**: API keys managed through environment variables
+- 根据模型名自动选择 provider（OpenAI / Gemini）
+- 图片以 MCP 标准 `ImageContent` 格式返回（`{ type: "image", data, mimeType }`），AI 客户端可直接使用
+- 支持三种 transport：stdio（默认）、SSE、HTTP
+- 支持自定义 API 代理地址（`OPENAI_BASE_URL` / `GEMINI_BASE_URL`）
+- 未配置 API Key 的 provider 自动禁用，不影响另一个 provider 使用
 
-## Supported Tool
-
-### `generate_image` - Unified Image Generation
-
-Generate images using AI models. The provider (OpenAI or Gemini) is automatically selected based on the model parameter.
-
-**Supported Models:**
-- **OpenAI**: `gpt-image-1` (latest), `dall-e-3`, `dall-e-2`
-- **Gemini**: `gemini-3-pro-image-preview` (default, recommended), `gemini-2.5-flash-image`, `gemini-2.0-flash-exp-image-generation`, `imagen-4.0-generate-001`, `imagen-4.0-ultra-generate-001`, `imagen-4.0-fast-generate-001`
-
-> Run `npm run models` to list all available Gemini models from the API.
-
-**Parameters:**
-- `prompt` (required): Text description of the desired image
-- `model` (optional): Model name (default: "gemini-3-pro-image-preview")
-  - OpenAI: "gpt-image-1", "dall-e-3", "dall-e-2"
-  - Gemini: "gemini-3-pro-image-preview", "gemini-2.5-flash-image", "gemini-2.0-flash-exp-image-generation", "imagen-4.0-*"
-- `size` (optional, OpenAI only): Image size
-  - DALL-E 3: "1024x1024", "1792x1024", "1024x1792"
-  - DALL-E 2: "256x256", "512x512", "1024x1024"
-- `quality` (optional, OpenAI only): "standard" or "hd" (DALL-E 3 only)
-- `n` (optional): Number of images to generate
-  - OpenAI: 1-10 for DALL-E 2, must be 1 for DALL-E 3
-  - Gemini: must be 1
-- `aspect_ratio` (optional, Gemini only): "1:1", "3:4", "4:3", "9:16", or "16:9"
-  - Note: Aspect ratio is included in the prompt since it's not directly supported by the SDK API
-- `response_format` (optional): Output format for images
-  - "url": Return image URLs (default for OpenAI)
-  - "base64": Return base64-encoded image data
-  - "auto" (default): Use provider default (URLs for OpenAI, base64 for Gemini)
-
-**Returns:** 
-- OpenAI: JSON with image URLs or base64 data (based on `response_format`)
-- Gemini: JSON with base64-encoded image data or text response if model doesn't support image generation
-
-**Note**: Image generation in Gemini requires specific model access. The experimental `gemini-2.0-flash-exp` model may support image generation, but availability varies by API key and region.
-
-## Installation
+## 快速开始
 
 ```bash
 npm install
 npm run build
+cp .env.example .env  # 填入 API Key
 ```
 
-## Configuration
+## 环境变量
 
-### API Keys
+| 变量 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `GEMINI_API_KEY` | 至少一个 | - | Google Gemini API Key |
+| `OPENAI_API_KEY` | 至少一个 | - | OpenAI API Key |
+| `DEFAULT_MODEL` | 否 | `gemini-2.5-flash-image` | 默认模型，工具调用时可覆盖 |
+| `GEMINI_BASE_URL` | 否 | - | Gemini API 代理地址 |
+| `OPENAI_BASE_URL` | 否 | - | OpenAI API 代理地址 |
+| `MCP_TRANSPORT` | 否 | `stdio` | 传输模式：`stdio` / `sse` / `http` |
+| `MCP_HOST` | 否 | `localhost` | SSE/HTTP 监听地址 |
+| `MCP_PORT` | 否 | `3000` | SSE/HTTP 监听端口 |
 
-Set up your API keys as environment variables:
+> 至少配置 `GEMINI_API_KEY` 或 `OPENAI_API_KEY` 其中一个，未配置的 provider 会自动禁用。
 
-```bash
-# For OpenAI DALL-E support
-export OPENAI_API_KEY="your-openai-api-key"
+## 工具：`generate_image`
 
-# Optional: Override OpenAI API base URL (e.g., for Azure OpenAI or proxies)
-export OPENAI_BASE_URL="https://your-custom-endpoint.com/v1"
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `prompt` | 是 | 图片描述 |
+| `model` | 否 | 模型名，默认 `DEFAULT_MODEL` 环境变量值 |
+| `size` | 否 | 图片尺寸（仅 OpenAI） |
+| `quality` | 否 | `standard` / `hd`（仅 DALL-E 3） |
+| `n` | 否 | 生成数量 |
+| `aspect_ratio` | 否 | 宽高比（仅 Gemini）：`1:1` `3:4` `4:3` `9:16` `16:9` |
+| `response_format` | 否 | `url` / `base64` / `auto`（默认） |
 
-# For Google Gemini support
-export GEMINI_API_KEY="your-gemini-api-key"
+支持的模型：
+- **OpenAI**: `gpt-image-1`, `dall-e-3`, `dall-e-2`
+- **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-3.0-generate-001`
 
-# Optional: Override Gemini API base URL (note: not fully supported in current SDK)
-export GEMINI_BASE_URL="https://your-custom-endpoint.com"
-```
+## 使用方式
 
-You can enable one or both providers by setting the corresponding API keys.
-
-### Transport Modes
-
-The server supports multiple transport protocols:
-
-#### Stdio (Default)
-Standard input/output mode for direct integration with MCP clients:
-
-```bash
-# No environment variable needed, stdio is the default
-node dist/index.js
-```
-
-#### SSE (Server-Sent Events)
-HTTP-based transport using Server-Sent Events for real-time communication:
-
-```bash
-# Set transport mode and optional port
-export MCP_TRANSPORT=sse
-export MCP_PORT=3000  # Optional, defaults to 3000
-export MCP_HOST=localhost  # Optional, defaults to localhost
-
-node dist/index.js
-```
-
-Endpoints:
-- SSE stream: `GET http://localhost:3000/sse`
-- Message endpoint: `POST http://localhost:3000/message`
-- Health check: `GET http://localhost:3000/`
-
-#### HTTP/HTTPS
-Similar to SSE mode, suitable for HTTP-based integrations:
-
-```bash
-export MCP_TRANSPORT=http
-export MCP_PORT=3000
-node dist/index.js
-```
-
-### Custom Base URLs
-
-You can override the default API endpoints:
-
-- **OpenAI**: Set `OPENAI_BASE_URL` to use Azure OpenAI, proxy servers, or custom endpoints
-- **Gemini**: Set `GEMINI_BASE_URL` (limited support - may require SDK updates for full functionality)
-
-## Usage
-
-### With Claude Desktop (stdio mode)
-
-Add this to your Claude Desktop configuration file:
-
-**MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+### Claude Desktop / Kiro（stdio 模式）
 
 ```json
 {
   "mcpServers": {
     "assets-gen": {
       "command": "node",
-      "args": ["/absolute/path/to/assets-gen-mcp/dist/index.js"],
+      "args": ["/path/to/assets-gen-mcp/dist/index.js"],
       "env": {
-        "OPENAI_API_KEY": "your-openai-api-key",
-        "OPENAI_BASE_URL": "https://your-custom-endpoint.com/v1",
-        "GEMINI_API_KEY": "your-gemini-api-key"
+        "GEMINI_API_KEY": "your-key",
+        "GEMINI_BASE_URL": "https://your-proxy.com"
       }
     }
   }
 }
 ```
 
-**Note:** The `OPENAI_BASE_URL` is optional and only needed if you want to use a custom endpoint (e.g., Azure OpenAI or a proxy).
+macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
-### With MCP Client
+### MCP SDK Client（编程接入）
 
 ```typescript
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -158,151 +79,46 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const transport = new StdioClientTransport({
   command: "node",
-  args: ["/path/to/assets-gen-mcp/dist/index.js"],
-  env: {
-    OPENAI_API_KEY: "your-openai-api-key",
-    GEMINI_API_KEY: "your-gemini-api-key",
-  },
+  args: ["dist/index.js"],
+  env: { GEMINI_API_KEY: "your-key" },
 });
-
-const client = new Client({
-  name: "example-client",
-  version: "1.0.0",
-}, {
-  capabilities: {},
-});
-
+const client = new Client({ name: "my-app", version: "1.0.0" }, { capabilities: {} });
 await client.connect(transport);
-```
 
-### With SSE/HTTP Mode
-
-When running in SSE or HTTP mode, you can integrate with web applications or other HTTP-based systems:
-
-```bash
-# Start the server in SSE mode
-export MCP_TRANSPORT=sse
-export MCP_PORT=3000
-export OPENAI_API_KEY="your-api-key"
-node dist/index.js
-```
-
-Then connect from your client application:
-
-```typescript
-// Health check
-const response = await fetch('http://localhost:3000/');
-const status = await response.json();
-console.log(status); // { status: 'ok', transport: 'sse', openai: 'enabled', ... }
-
-// Establish SSE connection
-const eventSource = new EventSource('http://localhost:3000/sse');
-eventSource.onmessage = (event) => {
-  const message = JSON.parse(event.data);
-  console.log('Received:', message);
-};
-
-// Send messages via POST
-await fetch('http://localhost:3000/message', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'tools/call',
-    params: {
-      name: 'generate_image',
-      arguments: {
-        prompt: 'A beautiful landscape',
-        model: 'dall-e-3'
-      }
-    },
-    id: 1
-  })
+const result = await client.callTool({
+  name: "generate_image",
+  arguments: { prompt: "A cat in space" },
 });
+// result.content → [{ type: "image", data: "<base64>", mimeType: "image/png" }]
 ```
 
-## Examples
-
-### Generate an image with DALL-E 3
-
-```json
-{
-  "name": "generate_image",
-  "arguments": {
-    "prompt": "A serene mountain landscape at sunset with a lake reflection",
-    "model": "dall-e-3",
-    "size": "1024x1024",
-    "quality": "hd"
-  }
-}
-```
-
-### Generate an image with DALL-E 2
-
-```json
-{
-  "name": "generate_image",
-  "arguments": {
-    "prompt": "A futuristic city skyline",
-    "model": "dall-e-2",
-    "size": "512x512",
-    "n": 2
-  }
-}
-```
-
-### Generate an image with Gemini
-
-```json
-{
-  "name": "generate_image",
-  "arguments": {
-    "prompt": "A cute robot playing with a puppy in a park",
-    "model": "gemini-2.0-flash",
-    "aspect_ratio": "16:9"
-  }
-}
-```
-
-### Generate with custom output format
-
-```json
-{
-  "name": "generate_image",
-  "arguments": {
-    "prompt": "A beautiful sunset over the ocean",
-    "model": "dall-e-3",
-    "response_format": "base64"
-  }
-}
-```
-
-This will return base64-encoded image data instead of URLs (useful for direct embedding or when working in environments without internet access to fetch URLs).
-
-**Note**: The tool automatically detects the provider based on the model name. Gemini image generation support depends on your API key's access level and the specific model's capabilities.
-
-## Development
+### SSE / HTTP 模式
 
 ```bash
-# Install dependencies
-npm install
-
-# Build the project
-npm run build
-
-# Watch mode for development
-npm run watch
+MCP_TRANSPORT=sse MCP_PORT=3000 node dist/index.js
 ```
 
-## API References
+端点：
+- `GET /sse` — SSE 连接
+- `POST /message?sessionId=xxx` — 发送消息
+- `GET /` — 健康检查
 
-- [OpenAI Image Generation API](https://platform.openai.com/docs/guides/image-generation)
-- [Google Gemini Image Generation](https://ai.google.dev/gemini-api/docs/image-generation)
+## 开发
+
+```bash
+npm run build             # 编译
+npm run watch             # 监听编译
+npm test                  # 单元测试（59 tests）
+npm run test:integration  # 集成测试（11 tests，需要 API Key）
+npm run models            # 列出可用 Gemini 模型
+```
+
+## 技术栈
+
+- [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) — MCP 服务端/客户端 SDK
+- [`@google/genai`](https://www.npmjs.com/package/@google/genai) — Google Gemini SDK（支持 `baseUrl`）
+- [`openai`](https://www.npmjs.com/package/openai) — OpenAI SDK
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
