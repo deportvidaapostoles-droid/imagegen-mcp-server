@@ -28,7 +28,16 @@
   ],
   "author": "",
   "license": "MIT",
+  "homepage": "https://github.com/ayaka209/assets-gen-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/ayaka209/assets-gen-mcp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayaka209/assets-gen-mcp.git"
+  },
   "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
   "dependencies": {
