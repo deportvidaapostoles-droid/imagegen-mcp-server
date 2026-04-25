@@ -6,120 +6,61 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  Tool,
   TextContent,
   ImageContent,
 } from "@modelcontextprotocol/sdk/types.js";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { createServer } from "http";
+import { getCliHelpText, getServerRuntimeConfig, loadDotEnv } from "./config.js";
+import {
+  detectProvider,
+  getUnsupportedModelError,
+  validateDallE2Params,
+  validateDallE3Params,
+  validateGeminiParams,
+  validateOpenAICompatibleImageParams,
+  validateGptImageParams,
+} from "./providers.js";
+import { TOOLS } from "./tools.js";
+import { createErrorResponse, formatErrorMessage, openAIImageToBase64 } from "./utils.js";
+import type { AspectRatio, ImageQuality } from "./validators.js";
+
+loadDotEnv();
+const runtimeConfig = getServerRuntimeConfig();
+
+if (runtimeConfig.helpRequested) {
+  console.log(getCliHelpText());
+  process.exit(0);
+}
 
 // Initialize API clients
 let openaiClient: OpenAI | null = null;
 let geminiClient: GoogleGenAI | null = null;
 
 // Initialize OpenAI if API key is provided
-if (process.env.OPENAI_API_KEY) {
-  const openaiConfig: any = {
-    apiKey: process.env.OPENAI_API_KEY,
+if (runtimeConfig.openaiApiKey) {
+  const openaiConfig: { apiKey: string; baseURL?: string } = {
+    apiKey: runtimeConfig.openaiApiKey,
   };
-  
+
   // Allow users to override the base URL
-  if (process.env.OPENAI_BASE_URL) {
-    openaiConfig.baseURL = process.env.OPENAI_BASE_URL;
+  if (runtimeConfig.openaiBaseUrl) {
+    openaiConfig.baseURL = runtimeConfig.openaiBaseUrl;
   }
-  
+
   openaiClient = new OpenAI(openaiConfig);
 }
 
 // Initialize Gemini if API key is provided
-if (process.env.GEMINI_API_KEY) {
+if (runtimeConfig.geminiApiKey) {
   geminiClient = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: process.env.GEMINI_BASE_URL ? { baseUrl: process.env.GEMINI_BASE_URL } : undefined,
+    apiKey: runtimeConfig.geminiApiKey,
+    httpOptions: runtimeConfig.geminiBaseUrl ? { baseUrl: runtimeConfig.geminiBaseUrl } : undefined,
   });
 }
 
-// Helper function to convert image URL to base64
-async function urlToBase64(url: string): Promise<{ data: string; mimeType: string }> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.statusText}`);
-    }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString('base64');
-    
-    // Try to determine mime type from response headers
-    const contentType = response.headers.get('content-type') || 'image/png';
-    
-    return {
-      data: base64,
-      mimeType: contentType,
-    };
-  } catch (error) {
-    throw new Error(`Failed to convert URL to base64: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "gemini-2.5-flash-image";
-
-// Define tools
-const TOOLS: Tool[] = [
-  {
-    name: "generate_image",
-    description:
-      "Generate an image using AI models (OpenAI DALL-E or Google Gemini). The provider is automatically selected based on the model parameter.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        prompt: {
-          type: "string",
-          description: "A text description of the desired image",
-        },
-        model: {
-          type: "string",
-          description: "The model to use for image generation. OpenAI models: 'dall-e-2', 'dall-e-3'. Gemini models: 'gemini-2.0-flash-exp', 'imagen-3.0-generate-001'",
-          enum: [
-            "dall-e-2",
-            "dall-e-3",
-            "gemini-2.0-flash-exp",
-            "imagen-3.0-generate-001",
-          ],
-          default: "dall-e-3",
-        },
-        size: {
-          type: "string",
-          description: "The size of the generated image (for OpenAI models only)",
-          enum: ["256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"],
-        },
-        quality: {
-          type: "string",
-          description: "The quality of the image (only for dall-e-3)",
-          enum: ["standard", "hd"],
-        },
-        n: {
-          type: "number",
-          description: "The number of images to generate (for OpenAI: 1-10 for dall-e-2, 1 for dall-e-3; for Gemini: only 1)",
-        },
-        aspect_ratio: {
-          type: "string",
-          description: "The aspect ratio of the generated image (for Gemini models only)",
-          enum: ["1:1", "3:4", "4:3", "9:16", "16:9"],
-        },
-        response_format: {
-          type: "string",
-          description: "Format for returning images: 'url' (URLs), 'base64' (base64-encoded data), or 'auto' (provider default: URLs for OpenAI, base64 for Gemini)",
-          enum: ["url", "base64", "auto"],
-          default: "auto",
-        },
-      },
-      required: ["prompt"],
-    },
-  },
-];
+const DEFAULT_MODEL = runtimeConfig.defaultModel;
 
 // Create server instance
 const server = new Server(
@@ -161,65 +102,61 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         prompt: string;
         model?: string;
         size?: string;
-        quality?: string;
+        quality?: ImageQuality;
         n?: number;
-        aspect_ratio?: string;
+        aspect_ratio?: AspectRatio;
         response_format?: "url" | "base64" | "auto";
       };
 
       // Ensure model is set (should always have default value)
       const selectedModel = model || DEFAULT_MODEL;
 
-      // Determine provider based on model
-      const isOpenAI = selectedModel.startsWith("dall-e") || selectedModel.startsWith("gpt-image");
-      const isGemini = selectedModel.startsWith("gemini") || selectedModel.startsWith("imagen");
-
-      if (!isOpenAI && !isGemini) {
-        throw new Error(
-          `Unknown model: ${selectedModel}. Supported models: gpt-image-1, dall-e-3, dall-e-2, gemini-3-pro-image-preview, gemini-2.5-flash-image, imagen-4.0-*. Run 'npm run models' to list all available models.`
-        );
+      const provider = detectProvider(selectedModel);
+      if (!provider) {
+        throw new Error(getUnsupportedModelError(selectedModel));
       }
 
       // Handle OpenAI models
-      if (isOpenAI) {
+      if (provider === "openai") {
         if (!openaiClient) {
           throw new Error(
             "OpenAI client not initialized. Please set OPENAI_API_KEY environment variable."
           );
         }
 
-        const openaiModel = selectedModel as "gpt-image-1" | "dall-e-3" | "dall-e-2";
-        const openaiSize = size || "1024x1024";
+        const isGptImageModel = selectedModel.startsWith("gpt-image");
+        const openaiSize = size || (isGptImageModel ? "auto" : "1024x1024");
         const openaiQuality = quality || "standard";
         const openaiN = n || 1;
 
-        // Validate size for model
-        if (openaiModel === "dall-e-3" || openaiModel === "gpt-image-1") {
-          if (!["1024x1024", "1792x1024", "1024x1792"].includes(openaiSize)) {
-            throw new Error(
-              "For dall-e-3/gpt-image-1, size must be one of: 1024x1024, 1792x1024, 1024x1792"
-            );
-          }
-          if (openaiN !== 1) {
-            throw new Error("For dall-e-3/gpt-image-1, n must be 1");
-          }
-        } else if (openaiModel === "dall-e-2") {
-          if (!["256x256", "512x512", "1024x1024"].includes(openaiSize)) {
-            throw new Error(
-              "For dall-e-2, size must be one of: 256x256, 512x512, 1024x1024"
-            );
-          }
-          if (openaiQuality === "hd") {
-            throw new Error("Quality 'hd' is only available for dall-e-3");
-          }
+        const openAIValidation =
+          isGptImageModel
+            ? validateGptImageParams(openaiSize, openaiN)
+            : selectedModel === "dall-e-3"
+              ? validateDallE3Params(openaiSize, openaiQuality, openaiN)
+              : selectedModel === "dall-e-2"
+                ? validateDallE2Params(openaiSize, openaiQuality)
+                : validateOpenAICompatibleImageParams(openaiN);
+
+        if (openAIValidation) {
+          throw new Error(openAIValidation.error);
         }
 
+        const openAIResponseFormat =
+          !isGptImageModel && response_format === "base64"
+            ? "b64_json"
+            : !isGptImageModel && response_format === "url"
+              ? "url"
+              : undefined;
+
         const response = await openaiClient.images.generate({
-          model: openaiModel,
+          model: selectedModel,
           prompt,
           n: openaiN,
-          size: openaiSize as any,
-          quality: openaiModel === "dall-e-3" ? (openaiQuality as any) : undefined,
+          // OpenAI-compatible vendors such as Doubao may accept sizes beyond the SDK's built-in union.
+          size: openaiSize as "auto" | "1024x1024" | "1536x1024" | "1024x1536" | "256x256" | "512x512" | "1792x1024" | "1024x1792" | null | undefined,
+          quality: selectedModel === "dall-e-3" ? openaiQuality : undefined,
+          response_format: openAIResponseFormat,
         });
 
         if (!response.data) {
@@ -237,16 +174,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Convert all images to MCP ImageContent
         for (const img of response.data) {
-          if (!img.url) continue;
-          const { data, mimeType } = await urlToBase64(img.url);
-          content.push({ type: "image", data, mimeType });
+          const imageData = await openAIImageToBase64(img);
+          if (!imageData) {
+            continue;
+          }
+
+          content.push({ type: "image", data: imageData.data, mimeType: imageData.mimeType });
+        }
+
+        if (!content.some((item) => item.type === "image")) {
+          throw new Error("No image data returned from OpenAI");
         }
 
         return { content };
       }
 
       // Handle Gemini models
-      if (isGemini) {
+      if (provider === "gemini") {
         if (!geminiClient) {
           throw new Error(
             "Gemini client not initialized. Please set GEMINI_API_KEY environment variable."
@@ -256,9 +200,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const geminiN = n || 1;
         const geminiAspectRatio = aspect_ratio || "1:1";
 
-        // Validate number of images
-        if (geminiN !== 1) {
-          throw new Error("Currently only 1 image generation is supported for Gemini");
+        const geminiValidation = validateGeminiParams(geminiN);
+        if (geminiValidation) {
+          throw new Error(geminiValidation.error);
         }
 
         const promptWithAspectRatio = geminiAspectRatio !== "1:1" 
@@ -324,30 +268,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              success: false,
-              error: errorMessage,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-      isError: true,
-    };
+    return createErrorResponse(formatErrorMessage(error));
   }
 });
 
 // Start the server
 async function main() {
-  const transportMode = process.env.MCP_TRANSPORT || "stdio";
+  runtimeConfig.warnings.forEach((warning) => {
+    console.error(`Config warning: ${warning}`);
+  });
+
+  const transportMode = runtimeConfig.transportMode;
   
   if (transportMode === "stdio") {
     // stdio mode (default)
@@ -363,8 +294,8 @@ async function main() {
     );
   } else if (transportMode === "sse" || transportMode === "http") {
     // SSE/HTTP mode
-    const port = parseInt(process.env.MCP_PORT || "3000", 10);
-    const host = process.env.MCP_HOST || "localhost";
+    const port = runtimeConfig.port;
+    const host = runtimeConfig.host;
     
     console.error(`Assets Generation MCP Server starting on ${host}:${port} (${transportMode} mode)`);
     console.error(

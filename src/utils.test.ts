@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   urlToBase64,
+  openAIImageToBase64,
   formatErrorMessage,
   createSuccessResponse,
   createErrorResponse,
@@ -93,6 +94,50 @@ describe('formatErrorMessage', () => {
 
   it('should handle undefined', () => {
     expect(formatErrorMessage(undefined)).toBe('undefined');
+  });
+});
+
+describe('openAIImageToBase64', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('should return base64 data directly when b64_json is present', async () => {
+    const result = await openAIImageToBase64({ b64_json: 'ZmFrZS1pbWFnZQ==' });
+
+    expect(result).toEqual({
+      data: 'ZmFrZS1pbWFnZQ==',
+      mimeType: 'image/png',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('should fetch image data when only url is present', async () => {
+    const mockImageData = new Uint8Array([137, 80, 78, 71]);
+    const mockResponse = {
+      ok: true,
+      arrayBuffer: () => Promise.resolve(mockImageData.buffer),
+      headers: new Map([['content-type', 'image/png']]),
+    };
+    mockResponse.headers.get = (key: string) =>
+      key === 'content-type' ? 'image/png' : null;
+
+    vi.mocked(fetch).mockResolvedValue(mockResponse as unknown as Response);
+
+    const result = await openAIImageToBase64({ url: 'https://example.com/image.png' });
+
+    expect(result).toEqual({
+      data: Buffer.from(mockImageData).toString('base64'),
+      mimeType: 'image/png',
+    });
+  });
+
+  it('should return null when image payload has no data', async () => {
+    await expect(openAIImageToBase64({})).resolves.toBeNull();
   });
 });
 

@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { config } from 'dotenv';
+import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -12,6 +13,8 @@ import { ChildProcess, spawn } from 'child_process';
 
 // Load environment variables
 config();
+
+const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
 
 /** Spawn MCP server with given transport mode, wait for "Server listening" on stderr */
 function spawnServer(transport: string, port: number): { process: ChildProcess; ready: Promise<void> } {
@@ -54,6 +57,69 @@ function verifyImageResult(result: any, label: string) {
   console.log(`${label}: got MCP ImageContent, mimeType:`, imageBlock.mimeType);
   return 'ok';
 }
+
+function isSkippableOpenAIError(error: any): boolean {
+  return Boolean(
+    error?.status === 429 ||
+    error?.message?.includes('model_not_found') ||
+    error?.message?.includes('does not exist') ||
+    error?.message?.includes('quota') ||
+    error?.message?.includes('rate limit')
+  );
+}
+
+function verifyOpenAIResponseImage(response: OpenAI.Images.ImagesResponse, label: string) {
+  const first = response.data?.[0];
+  expect(first).toBeDefined();
+  expect(first?.b64_json || first?.url).toBeDefined();
+  console.log(`${label}: got OpenAI image payload`, first?.b64_json ? 'b64_json' : 'url');
+}
+
+describe('OpenAI Integration Tests', () => {
+  let openaiClient: OpenAI | null = null;
+
+  beforeAll(() => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.warn('OPENAI_API_KEY not set, skipping OpenAI integration tests');
+      return;
+    }
+
+    openaiClient = new OpenAI({
+      apiKey,
+      baseURL: process.env.OPENAI_BASE_URL || undefined,
+    });
+  });
+
+  it('should initialize OpenAI client with API key', () => {
+    expect(process.env.OPENAI_API_KEY).toBeDefined();
+    expect(openaiClient).not.toBeNull();
+  });
+
+  it('should attempt image generation with gpt-image model', async () => {
+    if (!openaiClient) {
+      console.log('Skipping: No OpenAI client');
+      return;
+    }
+
+    try {
+      const response = await openaiClient.images.generate({
+        model: OPENAI_IMAGE_MODEL,
+        prompt: 'A simple black circle on a white background',
+        size: '1024x1024',
+      });
+
+      verifyOpenAIResponseImage(response, `OpenAI ${OPENAI_IMAGE_MODEL}`);
+    } catch (error: any) {
+      if (isSkippableOpenAIError(error)) {
+        console.log('OpenAI image API unavailable, skipping:', error.message?.substring(0, 120));
+        return;
+      }
+
+      throw error;
+    }
+  }, 60000);
+});
 
 describe('Gemini Integration Tests', () => {
   let geminiClient: GoogleGenAI | null = null;
@@ -173,6 +239,29 @@ describe('SSE MCP Integration Tests', () => {
     verifyImageResult(result, 'SSE generate_image');
   }, 60000);
 
+  it('should call generate_image via SSE with OpenAI-compatible endpoint', async () => {
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('Skipping: No OPENAI_API_KEY');
+      return;
+    }
+
+    try {
+      const result = await mcpClient.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'A purple triangle', model: OPENAI_IMAGE_MODEL },
+      });
+
+      verifyImageResult(result, `SSE ${OPENAI_IMAGE_MODEL}`);
+    } catch (error: any) {
+      if (isSkippableOpenAIError(error)) {
+        console.log('OpenAI proxy unavailable over SSE, skipping:', error.message?.substring(0, 120));
+        return;
+      }
+
+      throw error;
+    }
+  }, 60000);
+
   it('should return error for unavailable provider via SSE', async () => {
     if (process.env.OPENAI_API_KEY) {
       console.log('Skipping: OPENAI_API_KEY is set, cannot test unavailable provider');
@@ -239,6 +328,29 @@ describe('Stdio MCP Integration Tests', () => {
     verifyImageResult(result, 'Stdio generate_image');
   }, 60000);
 
+  it('should call generate_image via stdio with OpenAI-compatible endpoint', async () => {
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('Skipping: No OPENAI_API_KEY');
+      return;
+    }
+
+    try {
+      const result = await mcpClient.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'A silver cube', model: OPENAI_IMAGE_MODEL },
+      });
+
+      verifyImageResult(result, `Stdio ${OPENAI_IMAGE_MODEL}`);
+    } catch (error: any) {
+      if (isSkippableOpenAIError(error)) {
+        console.log('OpenAI proxy unavailable over stdio, skipping:', error.message?.substring(0, 120));
+        return;
+      }
+
+      throw error;
+    }
+  }, 60000);
+
   it('should return error for unavailable provider via stdio', async () => {
     if (process.env.OPENAI_API_KEY) {
       console.log('Skipping: OPENAI_API_KEY is set');
@@ -297,5 +409,28 @@ describe('HTTP MCP Integration Tests', () => {
     });
 
     verifyImageResult(result, 'HTTP generate_image');
+  }, 60000);
+
+  it('should call generate_image via HTTP with OpenAI-compatible endpoint', async () => {
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('Skipping: No OPENAI_API_KEY');
+      return;
+    }
+
+    try {
+      const result = await mcpClient.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'A gold star', model: OPENAI_IMAGE_MODEL },
+      });
+
+      verifyImageResult(result, `HTTP ${OPENAI_IMAGE_MODEL}`);
+    } catch (error: any) {
+      if (isSkippableOpenAIError(error)) {
+        console.log('OpenAI proxy unavailable over HTTP, skipping:', error.message?.substring(0, 120));
+        return;
+      }
+
+      throw error;
+    }
   }, 60000);
 });

@@ -6,10 +6,12 @@ import {
   isOpenAIModel,
   isGeminiModel,
   isSupportedModel,
+  GPT_IMAGE_SIZES,
   DALLE3_SIZES,
   DALLE2_SIZES,
   type OpenAIModel,
   type ImageQuality,
+  type GPTImageSize,
   type DallE3Size,
   type DallE2Size,
 } from './validators.js';
@@ -28,6 +30,41 @@ export interface ValidationError {
 }
 
 export type ValidationResult = OpenAIValidationResult | ValidationError;
+
+/**
+ * Validate OpenAI-compatible vendor image parameters
+ */
+export function validateOpenAICompatibleImageParams(n: number): ValidationError | null {
+  if (!Number.isInteger(n) || n < 1 || n > 10) {
+    return {
+      valid: false,
+      error: 'For OpenAI-compatible image models, n must be between 1 and 10',
+    };
+  }
+  return null;
+}
+
+/**
+ * Validate OpenAI GPT Image parameters
+ */
+export function validateGptImageParams(
+  size: string,
+  n: number
+): ValidationError | null {
+  if (!GPT_IMAGE_SIZES.includes(size as GPTImageSize)) {
+    return {
+      valid: false,
+      error: `For gpt-image models, size must be one of: ${GPT_IMAGE_SIZES.join(', ')}`,
+    };
+  }
+  if (!Number.isInteger(n) || n < 1 || n > 10) {
+    return {
+      valid: false,
+      error: 'For gpt-image models, n must be between 1 and 10',
+    };
+  }
+  return null;
+}
 
 /**
  * Validate OpenAI DALL-E 3 parameters
@@ -100,7 +137,7 @@ export function detectProvider(model: string): 'openai' | 'gemini' | null {
  * Get error message for unsupported model
  */
 export function getUnsupportedModelError(model: string): string {
-  return `Unknown model: ${model}. Supported models: dall-e-2, dall-e-3, gemini-2.0-flash-exp, imagen-3.0-generate-001`;
+  return `Unknown model: ${model}. Supported models: gpt-image-1, gpt-image-2, dall-e-2, dall-e-3, doubao-*, volcengine/doubao-*, gemini-3-pro-image-preview, gemini-2.5-flash-image, gemini-2.0-flash-exp-image-generation, imagen-4.0-generate-001, imagen-4.0-ultra-generate-001, imagen-4.0-fast-generate-001`;
 }
 
 /**

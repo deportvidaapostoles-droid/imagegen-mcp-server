@@ -12,6 +12,8 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "models": "npx tsx src/list-models.ts",
+    "models:openai": "npx tsx src/list-openai-models.ts",
+    "test:openai-proxy": "npx tsx src/test-openai-proxy.ts",
     "test": "vitest run --exclude src/integration.test.ts",
     "test:watch": "vitest --exclude src/integration.test.ts",
     "test:coverage": "vitest run --coverage --exclude src/integration.test.ts",
@@ -32,12 +34,12 @@
   "dependencies": {
     "@google/genai": "^1.42.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^17.2.3",
     "openai": "^4.77.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@vitest/coverage-v8": "^4.0.18",
-    "dotenv": "^17.2.3",
     "typescript": "^5.7.2",
     "vitest": "^4.0.18"
   },

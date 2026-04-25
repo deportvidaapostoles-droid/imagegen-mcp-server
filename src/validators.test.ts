@@ -13,12 +13,21 @@ describe('isOpenAIModel', () => {
     expect(isOpenAIModel('gpt-image-1')).toBe(true);
   });
 
+  it('should return true for gpt-image-2', () => {
+    expect(isOpenAIModel('gpt-image-2')).toBe(true);
+  });
+
   it('should return true for dall-e-2', () => {
     expect(isOpenAIModel('dall-e-2')).toBe(true);
   });
 
   it('should return true for dall-e-3', () => {
     expect(isOpenAIModel('dall-e-3')).toBe(true);
+  });
+
+  it('should return true for doubao models', () => {
+    expect(isOpenAIModel('doubao-seedream-4-0-250828')).toBe(true);
+    expect(isOpenAIModel('volcengine/doubao-seedream-5-0-260128')).toBe(true);
   });
 
   it('should return false for gemini models', () => {
@@ -85,8 +94,10 @@ describe('Constants', () => {
 
   it('should have all expected supported models', () => {
     expect(SUPPORTED_MODELS).toContain('gpt-image-1');
+    expect(SUPPORTED_MODELS).toContain('gpt-image-2');
     expect(SUPPORTED_MODELS).toContain('dall-e-2');
     expect(SUPPORTED_MODELS).toContain('dall-e-3');
+    expect(SUPPORTED_MODELS).toContain('doubao-seedream-4-0-250828');
     expect(SUPPORTED_MODELS).toContain('gemini-3-pro-image-preview');
     expect(SUPPORTED_MODELS).toContain('imagen-4.0-generate-001');
   });

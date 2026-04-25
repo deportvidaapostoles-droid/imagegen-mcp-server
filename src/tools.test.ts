@@ -31,15 +31,17 @@ describe('GENERATE_IMAGE_TOOL', () => {
   it('should define model property with enum', () => {
     const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
     expect(schema.properties.model).toBeDefined();
-    expect(schema.properties.model.enum).toContain('dall-e-2');
-    expect(schema.properties.model.enum).toContain('dall-e-3');
-    expect(schema.properties.model.enum).toContain('gemini-3-pro-image-preview');
+    expect(schema.properties.model.description).toContain('gpt-image-2');
+    expect(schema.properties.model.description).toContain('doubao-seedream');
+    expect(schema.properties.model.examples).toContain('dall-e-2');
+    expect(schema.properties.model.examples).toContain('gemini-3-pro-image-preview');
   });
 
   it('should define size property', () => {
     const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
     expect(schema.properties.size).toBeDefined();
-    expect(schema.properties.size.enum).toContain('1024x1024');
+    expect(schema.properties.size.description).toContain('2K');
+    expect(schema.properties.size.description).toContain('1024x1024');
   });
 
   it('should define quality property', () => {

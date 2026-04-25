@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  validateOpenAICompatibleImageParams,
+  validateGptImageParams,
   validateDallE3Params,
   validateDallE2Params,
   validateGeminiParams,
@@ -7,6 +9,39 @@ import {
   getUnsupportedModelError,
   validateModel,
 } from './providers.js';
+
+describe('validateOpenAICompatibleImageParams', () => {
+  it('should return null for valid n', () => {
+    expect(validateOpenAICompatibleImageParams(1)).toBeNull();
+    expect(validateOpenAICompatibleImageParams(10)).toBeNull();
+  });
+
+  it('should return error when n is out of range', () => {
+    const result = validateOpenAICompatibleImageParams(0);
+    expect(result).not.toBeNull();
+    expect(result?.error).toBe('For OpenAI-compatible image models, n must be between 1 and 10');
+  });
+});
+
+describe('validateGptImageParams', () => {
+  it('should return null for valid params', () => {
+    expect(validateGptImageParams('auto', 1)).toBeNull();
+    expect(validateGptImageParams('1536x1024', 3)).toBeNull();
+    expect(validateGptImageParams('1024x1536', 10)).toBeNull();
+  });
+
+  it('should return error for invalid size', () => {
+    const result = validateGptImageParams('1792x1024', 1);
+    expect(result).not.toBeNull();
+    expect(result?.error).toContain('size must be one of');
+  });
+
+  it('should return error when n is out of range', () => {
+    const result = validateGptImageParams('1024x1024', 11);
+    expect(result).not.toBeNull();
+    expect(result?.error).toBe('For gpt-image models, n must be between 1 and 10');
+  });
+});
 
 describe('validateDallE3Params', () => {
   it('should return null for valid params', () => {
@@ -71,6 +106,16 @@ describe('detectProvider', () => {
     expect(detectProvider('dall-e-3')).toBe('openai');
   });
 
+  it('should detect OpenAI provider for gpt-image models', () => {
+    expect(detectProvider('gpt-image-1')).toBe('openai');
+    expect(detectProvider('gpt-image-2')).toBe('openai');
+  });
+
+  it('should detect OpenAI provider for doubao models', () => {
+    expect(detectProvider('doubao-seedream-4-0-250828')).toBe('openai');
+    expect(detectProvider('volcengine/doubao-seedream-5-0-260128')).toBe('openai');
+  });
+
   it('should detect Gemini provider for gemini models', () => {
     expect(detectProvider('gemini-2.0-flash-exp')).toBe('gemini');
   });
@@ -93,16 +138,26 @@ describe('getUnsupportedModelError', () => {
 
   it('should list supported models', () => {
     const error = getUnsupportedModelError('test');
+    expect(error).toContain('gpt-image-2');
+    expect(error).toContain('doubao-*');
     expect(error).toContain('dall-e-2');
     expect(error).toContain('dall-e-3');
-    expect(error).toContain('gemini-2.0-flash-exp');
-    expect(error).toContain('imagen-3.0-generate-001');
+    expect(error).toContain('gemini-2.5-flash-image');
+    expect(error).toContain('imagen-4.0-generate-001');
   });
 });
 
 describe('validateModel', () => {
-  it('should return openai provider for dall-e models', () => {
-    const result = validateModel('dall-e-3');
+  it('should return openai provider for OpenAI image models', () => {
+    const result = validateModel('gpt-image-2');
+    expect('provider' in result).toBe(true);
+    if ('provider' in result) {
+      expect(result.provider).toBe('openai');
+    }
+  });
+
+  it('should return openai provider for doubao models', () => {
+    const result = validateModel('doubao-seedream-4-0-250828');
     expect('provider' in result).toBe(true);
     if ('provider' in result) {
       expect(result.provider).toBe('openai');
@@ -110,7 +165,7 @@ describe('validateModel', () => {
   });
 
   it('should return gemini provider for gemini models', () => {
-    const result = validateModel('gemini-2.0-flash-exp');
+    const result = validateModel('gemini-2.0-flash-exp-image-generation');
     expect('provider' in result).toBe(true);
     if ('provider' in result) {
       expect(result.provider).toBe('gemini');

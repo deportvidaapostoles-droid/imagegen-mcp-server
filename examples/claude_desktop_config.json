@@ -1,13 +1,17 @@
 {
   "mcpServers": {
     "assets-gen": {
-      "command": "node",
-      "args": ["/absolute/path/to/assets-gen-mcp/dist/index.js"],
-      "env": {
-        "OPENAI_API_KEY": "your-openai-api-key-here",
-        "OPENAI_BASE_URL": "https://api.openai.com/v1",
-        "GEMINI_API_KEY": "your-gemini-api-key-here"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@ayaka209/assets-gen-mcp",
+        "--openai-api-key",
+        "your-openai-api-key-here",
+        "--openai-base-url",
+        "https://api.openai.com/v1",
+        "--default-model",
+        "gpt-image-2"
+      ]
     }
   }
 }

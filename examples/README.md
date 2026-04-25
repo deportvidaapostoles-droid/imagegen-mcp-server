@@ -15,23 +15,33 @@ Add this to your Claude Desktop configuration:
 {
   "mcpServers": {
     "assets-gen": {
-      "command": "node",
-      "args": ["/absolute/path/to/assets-gen-mcp/dist/index.js"],
-      "env": {
-        "OPENAI_API_KEY": "your-openai-api-key-here",
-        "OPENAI_BASE_URL": "https://api.openai.com/v1",
-        "GEMINI_API_KEY": "your-gemini-api-key-here"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "@ayaka209/assets-gen-mcp",
+        "--openai-api-key",
+        "your-openai-api-key-here",
+        "--openai-base-url",
+        "https://api.openai.com/v1",
+        "--default-model",
+        "gpt-image-2"
+      ]
     }
   }
 }
 ```
 
 Replace:
-- `/absolute/path/to/assets-gen-mcp` with the actual path to your cloned repository
 - `your-openai-api-key-here` with your OpenAI API key (or remove this line if not using OpenAI)
-- `OPENAI_BASE_URL` is optional - only needed for custom endpoints like Azure OpenAI (or remove this line to use default)
-- `your-gemini-api-key-here` with your Google Gemini API key (or remove this line if not using Gemini)
+- `--openai-base-url` is optional - only needed for custom endpoints (remove it to use the default OpenAI base URL)
+
+You can also keep using `env` if your MCP client supports it. The server now supports all three:
+
+1. `.env` in the current working directory
+2. Process environment variables
+3. CLI arguments like `--openai-api-key` and `--gemini-api-key`
+
+Priority is: **CLI args > env > .env > built-in defaults**.
 
 ## Getting API Keys
 

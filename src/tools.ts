@@ -3,6 +3,7 @@
  */
 
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { SUPPORTED_MODELS } from "./validators.js";
 
 /**
  * Generate image tool definition
@@ -20,24 +21,13 @@ export const GENERATE_IMAGE_TOOL: Tool = {
       },
       model: {
         type: "string",
-        description: "The model to use for image generation. OpenAI: 'gpt-image-1' (latest), 'dall-e-3', 'dall-e-2'. Gemini: 'gemini-3-pro-image-preview' (recommended), 'gemini-2.5-flash-image', 'gemini-2.0-flash-exp-image-generation', 'imagen-4.0-generate-001', 'imagen-4.0-ultra-generate-001', 'imagen-4.0-fast-generate-001'. Run 'npm run models' to list all available models.",
-        enum: [
-          "gpt-image-1",
-          "dall-e-3",
-          "dall-e-2",
-          "gemini-3-pro-image-preview",
-          "gemini-2.5-flash-image",
-          "gemini-2.0-flash-exp-image-generation",
-          "imagen-4.0-generate-001",
-          "imagen-4.0-ultra-generate-001",
-          "imagen-4.0-fast-generate-001",
-        ],
+        description: "The model to use for image generation. Known OpenAI-compatible models: 'gpt-image-2', 'gpt-image-1', 'dall-e-3', 'dall-e-2', 'doubao-seedream-4-0-250828', 'volcengine/doubao-seedream-5-0-260128'. Gemini: 'gemini-3-pro-image-preview', 'gemini-2.5-flash-image', 'gemini-2.0-flash-exp-image-generation', 'imagen-4.0-generate-001', 'imagen-4.0-ultra-generate-001', 'imagen-4.0-fast-generate-001'. Other future 'doubao-*' and 'volcengine/doubao-*' image models are also accepted.",
         default: "gemini-3-pro-image-preview",
+        examples: [...SUPPORTED_MODELS],
       },
       size: {
         type: "string",
-        description: "The size of the generated image (for OpenAI models only)",
-        enum: ["256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"],
+        description: "The size of the generated image (for OpenAI-compatible models). Examples: auto, 512x512, 1024x1024, 1536x1024, 1024x1536, 2K, 4K, 2048x2048.",
       },
       quality: {
         type: "string",

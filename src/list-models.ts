@@ -2,21 +2,23 @@
 /**
  * List available Gemini models from Google AI API
  */
-import { config } from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { loadDotEnv, resolveConfig } from './config.js';
 
-config();
+loadDotEnv();
+const runtimeConfig = resolveConfig();
+runtimeConfig.warnings.forEach((warning) => console.warn(`Config warning: ${warning}`));
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = runtimeConfig.values.GEMINI_API_KEY;
 
 if (!apiKey) {
-  console.error('Error: GEMINI_API_KEY not set in environment or .env file');
+  console.error('Error: GEMINI_API_KEY not set via CLI, environment, or .env file');
   process.exit(1);
 }
 
 const ai = new GoogleGenAI({
   apiKey,
-  httpOptions: process.env.GEMINI_BASE_URL ? { baseUrl: process.env.GEMINI_BASE_URL } : undefined,
+  httpOptions: runtimeConfig.values.GEMINI_BASE_URL ? { baseUrl: runtimeConfig.values.GEMINI_BASE_URL } : undefined,
 });
 
 async function listModels() {

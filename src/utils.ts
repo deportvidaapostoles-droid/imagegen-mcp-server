@@ -31,6 +31,27 @@ export async function urlToBase64(url: string): Promise<{ data: string; mimeType
 }
 
 /**
+ * Normalize OpenAI-compatible image responses into base64 image data.
+ */
+export async function openAIImageToBase64(image: {
+  b64_json?: string;
+  url?: string;
+}): Promise<{ data: string; mimeType: string } | null> {
+  if (image.b64_json) {
+    return {
+      data: image.b64_json,
+      mimeType: 'image/png',
+    };
+  }
+
+  if (image.url) {
+    return urlToBase64(image.url);
+  }
+
+  return null;
+}
+
+/**
  * Format an error message from an unknown error type
  * @param error - The error to format
  * @returns Formatted error message string
