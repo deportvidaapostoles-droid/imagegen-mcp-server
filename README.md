@@ -37,6 +37,8 @@ cp .env.example .env  # 填入 API Key
 > 至少配置 `GEMINI_API_KEY` 或 `OPENAI_API_KEY` 其中一个，未配置的 provider 会自动禁用。
 >
 > `.env` 中如果还是示例占位值（如 `your-gemini-api-key`），现在会被自动忽略，不会误判为已启用。
+>
+> 配置优先级：**CLI 参数 > 进程环境变量 > 当前工作目录 `.env` > 内置默认值**。
 
 ## 工具：`generate_image`
 
