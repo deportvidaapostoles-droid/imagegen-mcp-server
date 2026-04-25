@@ -30,8 +30,17 @@ loadDotEnv();
 const runtimeConfig = getServerRuntimeConfig();
 
 if (runtimeConfig.helpRequested) {
-  console.log(getCliHelpText());
+  process.stderr.write(getCliHelpText() + '\n');
   process.exit(0);
+}
+
+const shouldEmitRuntimeLogs =
+  runtimeConfig.transportMode !== 'stdio' || runtimeConfig.stdioLogsEnabled;
+
+function logRuntime(...args: unknown[]): void {
+  if (shouldEmitRuntimeLogs) {
+    console.error(...args);
+  }
 }
 
 // Initialize API clients
@@ -98,6 +107,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         n,
         aspect_ratio,
         response_format = "auto",
+        timeout: timeoutSeconds = 120,
       } = args as {
         prompt: string;
         model?: string;
@@ -106,7 +116,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         n?: number;
         aspect_ratio?: AspectRatio;
         response_format?: "url" | "base64" | "auto";
+        timeout?: number;
       };
+
+      const timeoutMs = Math.max(1000, timeoutSeconds * 1000);
 
       // Ensure model is set (should always have default value)
       const selectedModel = model || DEFAULT_MODEL;
@@ -155,9 +168,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           n: openaiN,
           // OpenAI-compatible vendors such as Doubao may accept sizes beyond the SDK's built-in union.
           size: openaiSize as "auto" | "1024x1024" | "1536x1024" | "1024x1536" | "256x256" | "512x512" | "1792x1024" | "1024x1792" | null | undefined,
-          quality: selectedModel === "dall-e-3" ? openaiQuality : undefined,
+          quality: (selectedModel === "dall-e-3" || isGptImageModel) ? openaiQuality : undefined,
           response_format: openAIResponseFormat,
-        });
+        }, { timeout: timeoutMs });
 
         if (!response.data) {
           throw new Error("No image data returned from OpenAI");
@@ -208,11 +221,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const promptWithAspectRatio = geminiAspectRatio !== "1:1" 
           ? `${prompt} (aspect ratio: ${geminiAspectRatio})`
           : prompt;
-        
-        const result = await geminiClient.models.generateContent({
-          model: selectedModel,
-          contents: promptWithAspectRatio,
-        });
+
+        const abortController = new AbortController();
+        const abortTimer = setTimeout(() => abortController.abort(), timeoutMs);
+        let result;
+        try {
+          result = await geminiClient.models.generateContent({
+            model: selectedModel,
+            contents: promptWithAspectRatio,
+            config: { abortSignal: abortController.signal },
+          });
+        } finally {
+          clearTimeout(abortTimer);
+        }
 
         const candidates = result.candidates;
 
@@ -275,7 +296,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Start the server
 async function main() {
   runtimeConfig.warnings.forEach((warning) => {
-    console.error(`Config warning: ${warning}`);
+    logRuntime(`Config warning: ${warning}`);
   });
 
   const transportMode = runtimeConfig.transportMode;
@@ -285,11 +306,11 @@ async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     
-    console.error("Assets Generation MCP Server running on stdio");
-    console.error(
+    logRuntime("Assets Generation MCP Server running on stdio");
+    logRuntime(
       `OpenAI support: ${openaiClient ? "enabled" : "disabled (OPENAI_API_KEY not set)"}`
     );
-    console.error(
+    logRuntime(
       `Gemini support: ${geminiClient ? "enabled" : "disabled (GEMINI_API_KEY not set)"}`
     );
   } else if (transportMode === "sse" || transportMode === "http") {
@@ -297,11 +318,11 @@ async function main() {
     const port = runtimeConfig.port;
     const host = runtimeConfig.host;
     
-    console.error(`Assets Generation MCP Server starting on ${host}:${port} (${transportMode} mode)`);
-    console.error(
+    logRuntime(`Assets Generation MCP Server starting on ${host}:${port} (${transportMode} mode)`);
+    logRuntime(
       `OpenAI support: ${openaiClient ? "enabled" : "disabled (OPENAI_API_KEY not set)"}`
     );
-    console.error(
+    logRuntime(
       `Gemini support: ${geminiClient ? "enabled" : "disabled (GEMINI_API_KEY not set)"}`
     );
     
@@ -325,7 +346,7 @@ async function main() {
       
       if (url.pathname === '/sse' && req.method === 'GET') {
         // Establish SSE connection
-        console.error('Establishing SSE connection');
+        logRuntime('Establishing SSE connection');
         const transport = new SSEServerTransport('/message', res);
         const sessionId = transport.sessionId;
         
@@ -334,17 +355,17 @@ async function main() {
         
         // Clean up on close
         transport.onclose = () => {
-          console.error(`SSE connection closed for session ${sessionId}`);
+          logRuntime(`SSE connection closed for session ${sessionId}`);
           transports.delete(sessionId);
         };
         
         // Connect to server (connect() calls start() automatically)
         await server.connect(transport);
         
-        console.error(`SSE connection established with session ID: ${sessionId}`);
+        logRuntime(`SSE connection established with session ID: ${sessionId}`);
       } else if (url.pathname === '/message' && req.method === 'POST') {
         // Handle incoming messages
-        console.error('Received POST message');
+        logRuntime('Received POST message');
         
         let body = '';
         req.on('data', chunk => {
@@ -371,7 +392,7 @@ async function main() {
               }));
             }
           } catch (error) {
-            console.error('Error handling message:', error);
+            logRuntime('Error handling message:', error);
             res.writeHead(400);
             res.end(JSON.stringify({ error: 'Invalid JSON' }));
           }
@@ -392,9 +413,9 @@ async function main() {
     });
     
     httpServer.listen(port, host, () => {
-      console.error(`Server listening on http://${host}:${port}`);
-      console.error(`SSE endpoint: http://${host}:${port}/sse`);
-      console.error(`Health check: http://${host}:${port}/`);
+      logRuntime(`Server listening on http://${host}:${port}`);
+      logRuntime(`SSE endpoint: http://${host}:${port}/sse`);
+      logRuntime(`Health check: http://${host}:${port}/`);
     });
   } else {
     throw new Error(`Unknown transport mode: ${transportMode}. Supported: stdio, sse, http`);

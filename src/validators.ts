@@ -14,7 +14,7 @@ export type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
 export type DallE2Size = '256x256' | '512x512' | '1024x1024';
 export type OpenAISize = DallE2Size | DallE3Size | GPTImageSize;
 
-export type ImageQuality = 'standard' | 'hd';
+export type ImageQuality = 'standard' | 'hd' | 'high' | 'medium' | 'low';
 export type AspectRatio = '1:1' | '3:4' | '4:3' | '9:16' | '16:9';
 export type ResponseFormat = 'url' | 'base64' | 'auto';
 

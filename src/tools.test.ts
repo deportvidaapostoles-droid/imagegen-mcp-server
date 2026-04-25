@@ -40,8 +40,8 @@ describe('GENERATE_IMAGE_TOOL', () => {
   it('should define size property', () => {
     const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
     expect(schema.properties.size).toBeDefined();
-    expect(schema.properties.size.description).toContain('2K');
     expect(schema.properties.size.description).toContain('1024x1024');
+    expect(schema.properties.size.description).toContain('1536x1024');
   });
 
   it('should define quality property', () => {
@@ -57,6 +57,13 @@ describe('GENERATE_IMAGE_TOOL', () => {
     expect(schema.properties.response_format.enum).toContain('url');
     expect(schema.properties.response_format.enum).toContain('base64');
     expect(schema.properties.response_format.enum).toContain('auto');
+  });
+
+  it('should define timeout property with default 120', () => {
+    const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
+    expect(schema.properties.timeout).toBeDefined();
+    expect(schema.properties.timeout.type).toBe('number');
+    expect(schema.properties.timeout.default).toBe(120);
   });
 });
 

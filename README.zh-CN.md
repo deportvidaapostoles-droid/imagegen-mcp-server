@@ -33,6 +33,7 @@ cp .env.example .env  # 填入 API Key
 | `OPENAI_BASE_URL` | 否 | - | OpenAI API 代理地址 |
 | `OPENAI_IMAGE_MODEL` | 否 | `gpt-image-2` | 集成测试时使用的 OpenAI 图片模型 |
 | `MCP_TRANSPORT` | 否 | `stdio` | 传输模式：`stdio` / `sse` / `http` |
+| `MCP_STDIO_LOGS` | 否 | `false` | 在 stdio 模式下启用启动/运行日志（调试时设为 `true`） |
 | `MCP_HOST` | 否 | `localhost` | SSE/HTTP 监听地址 |
 | `MCP_PORT` | 否 | `3000` | SSE/HTTP 监听端口 |
 
@@ -44,15 +45,16 @@ cp .env.example .env  # 填入 API Key
 
 ## 工具：`generate_image`
 
-| 参数 | 必填 | 说明 |
-|------|------|------|
-| `prompt` | 是 | 图片描述 |
-| `model` | 否 | 模型名，默认 `DEFAULT_MODEL` 环境变量值 |
-| `size` | 否 | 图片尺寸（仅 OpenAI-compatible） |
-| `quality` | 否 | `standard` / `hd`（仅 DALL-E 3） |
-| `n` | 否 | 生成数量 |
-| `aspect_ratio` | 否 | 宽高比（仅 Gemini）：`1:1` `3:4` `4:3` `9:16` `16:9` |
-| `response_format` | 否 | `url` / `base64` / `auto`（默认） |
+| 参数 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `prompt` | 是 | - | 详细的图片描述 |
+| `model` | 否 | `DEFAULT_MODEL` | 模型名，见下方支持模型列表 |
+| `size` | 否 | `auto` / `1024x1024` | 图片尺寸（仅 OpenAI-compatible 模型有效） |
+| `quality` | 否 | `standard` | gpt-image-* 支持 `high`/`medium`/`low`/`standard`；dall-e-3 支持 `hd`/`standard` |
+| `n` | 否 | `1` | 生成数量（gpt-image-*: 1–10；dall-e-3: 1；Gemini: 1） |
+| `aspect_ratio` | 否 | `1:1` | 宽高比，仅 Gemini 有效：`1:1` `3:4` `4:3` `9:16` `16:9` |
+| `response_format` | 否 | `auto` | `url` / `base64` / `auto` |
+| `timeout` | 否 | `120` | 最长等待时间（**秒**）。代理慢或使用高质量模型时可适当增大 |
 
 支持的模型：
 
