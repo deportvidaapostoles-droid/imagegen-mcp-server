@@ -19,6 +19,12 @@ describe('parseCliArgs', () => {
     expect(parsed.values.MCP_PORT).toBe('4000');
   });
 
+  it('should treat boolean flags without a value as true', () => {
+    const parsed = parseCliArgs(['--mcp-stdio-logs']);
+    expect(parsed.values.MCP_STDIO_LOGS).toBe('true');
+    expect(parsed.warnings).toHaveLength(0);
+  });
+
   it('should detect help flag', () => {
     const parsed = parseCliArgs(['--help']);
     expect(parsed.helpRequested).toBe(true);
@@ -58,6 +64,7 @@ describe('getServerRuntimeConfig', () => {
 
     expect(config.defaultModel).toBe('gemini-2.5-flash-image');
     expect(config.transportMode).toBe('stdio');
+    expect(config.stdioLogsEnabled).toBe(false);
     expect(config.host).toBe('localhost');
     expect(config.port).toBe(3000);
   });
@@ -72,6 +79,21 @@ describe('getServerRuntimeConfig', () => {
     expect(config.port).toBe(3000);
     expect(config.warnings.some((warning) => warning.includes('MCP_TRANSPORT'))).toBe(true);
     expect(config.warnings.some((warning) => warning.includes('MCP_PORT'))).toBe(true);
+  });
+
+  it('should enable stdioLogsEnabled via env var', () => {
+    const config = getServerRuntimeConfig([], { MCP_STDIO_LOGS: 'true' });
+    expect(config.stdioLogsEnabled).toBe(true);
+  });
+
+  it('should enable stdioLogsEnabled via CLI flag without value', () => {
+    const config = getServerRuntimeConfig(['--mcp-stdio-logs'], {});
+    expect(config.stdioLogsEnabled).toBe(true);
+  });
+
+  it('should disable stdioLogsEnabled when set to false', () => {
+    const config = getServerRuntimeConfig(['--mcp-stdio-logs=false'], {});
+    expect(config.stdioLogsEnabled).toBe(false);
   });
 });
 

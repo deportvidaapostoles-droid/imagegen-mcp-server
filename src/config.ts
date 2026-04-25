@@ -9,6 +9,7 @@ export type ConfigKey =
   | 'GEMINI_API_KEY'
   | 'GEMINI_BASE_URL'
   | 'MCP_TRANSPORT'
+  | 'MCP_STDIO_LOGS'
   | 'MCP_HOST'
   | 'MCP_PORT'
   | 'OPENAI_IMAGE_MODEL'
@@ -21,11 +22,14 @@ const CLI_FLAG_TO_CONFIG_KEY: Record<string, ConfigKey> = {
   'gemini-api-key': 'GEMINI_API_KEY',
   'gemini-base-url': 'GEMINI_BASE_URL',
   'mcp-transport': 'MCP_TRANSPORT',
+  'mcp-stdio-logs': 'MCP_STDIO_LOGS',
   'mcp-host': 'MCP_HOST',
   'mcp-port': 'MCP_PORT',
   'openai-image-model': 'OPENAI_IMAGE_MODEL',
   'openai-image-prompt': 'OPENAI_IMAGE_PROMPT',
 };
+
+const BOOLEAN_CONFIG_KEYS = new Set<ConfigKey>(['MCP_STDIO_LOGS']);
 
 const PLACEHOLDER_VALUES: Partial<Record<ConfigKey, string[]>> = {
   OPENAI_API_KEY: ['sk-your-openai-api-key', 'your-openai-api-key', 'your-key'],
@@ -51,6 +55,7 @@ export interface ServerRuntimeConfig {
   geminiApiKey?: string;
   geminiBaseUrl?: string;
   transportMode: TransportMode;
+  stdioLogsEnabled: boolean;
   host: string;
   port: number;
   helpRequested: boolean;
@@ -58,7 +63,7 @@ export interface ServerRuntimeConfig {
 }
 
 export function loadDotEnv(): void {
-  loadDotEnvFile();
+  loadDotEnvFile({ quiet: true });
 }
 
 export function parseCliArgs(argv: string[] = process.argv.slice(2)): ParsedCliArgs {
@@ -97,6 +102,8 @@ export function parseCliArgs(argv: string[] = process.argv.slice(2)): ParsedCliA
     let value: string | undefined;
     if (equalsIndex >= 0) {
       value = raw.slice(equalsIndex + 1);
+    } else if (BOOLEAN_CONFIG_KEYS.has(mappedKey)) {
+      value = 'true';
     } else if (index + 1 < argv.length && !argv[index + 1].startsWith('--')) {
       value = argv[index + 1];
       index += 1;
@@ -165,6 +172,7 @@ export function getServerRuntimeConfig(
     geminiApiKey: resolved.values.GEMINI_API_KEY,
     geminiBaseUrl: resolved.values.GEMINI_BASE_URL,
     transportMode,
+    stdioLogsEnabled: parseBooleanConfig(resolved.values.MCP_STDIO_LOGS),
     host: resolved.values.MCP_HOST ?? 'localhost',
     port,
     helpRequested: resolved.helpRequested,
@@ -183,6 +191,7 @@ export function getCliHelpText(): string {
     '  --gemini-base-url <value>',
     '  --default-model <value>',
     '  --mcp-transport <stdio|sse|http>',
+    '  --mcp-stdio-logs          Enable startup/runtime logs in stdio mode (default: off)',
     '  --mcp-host <value>',
     '  --mcp-port <number>',
     '  --openai-image-model <value>',
@@ -215,6 +224,11 @@ function normalizeConfigValue(
   }
 
   return trimmed;
+}
+
+function parseBooleanConfig(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return value.toLowerCase() !== 'false' && value !== '0';
 }
 
 function isTransportMode(value: string): value is TransportMode {

@@ -33,6 +33,7 @@ cp .env.example .env
 | `OPENAI_BASE_URL` | No | - | OpenAI-compatible API proxy endpoint |
 | `OPENAI_IMAGE_MODEL` | No | `gpt-image-2` | OpenAI-compatible image model used in integration tests |
 | `MCP_TRANSPORT` | No | `stdio` | Transport mode: `stdio` / `sse` / `http` |
+| `MCP_STDIO_LOGS` | No | `false` | Enable startup/runtime logs in stdio mode (set `true` to re-enable for debugging) |
 | `MCP_HOST` | No | `localhost` | Host for SSE/HTTP mode |
 | `MCP_PORT` | No | `3000` | Port for SSE/HTTP mode |
 
@@ -44,15 +45,16 @@ cp .env.example .env
 
 ## Tool: `generate_image`
 
-| Parameter | Required | Description |
-|------|------|------|
-| `prompt` | Yes | Image prompt |
-| `model` | No | Model name, defaults to `DEFAULT_MODEL` |
-| `size` | No | Image size for OpenAI-compatible models |
-| `quality` | No | `standard` / `hd` (DALL-E 3 only) |
-| `n` | No | Number of images |
-| `aspect_ratio` | No | Gemini-only aspect ratio: `1:1` `3:4` `4:3` `9:16` `16:9` |
-| `response_format` | No | `url` / `base64` / `auto` (default) |
+| Parameter | Required | Default | Description |
+|------|------|--------|------|
+| `prompt` | Yes | - | Detailed image description |
+| `model` | No | `DEFAULT_MODEL` | Model name — see supported models below |
+| `size` | No | `auto` / `1024x1024` | Image dimensions for OpenAI-compatible models |
+| `quality` | No | `standard` | `high`/`medium`/`low`/`standard` (gpt-image-*) or `hd`/`standard` (dall-e-3) |
+| `n` | No | `1` | Number of images (gpt-image-*: 1–10; dall-e-3: 1; Gemini: 1) |
+| `aspect_ratio` | No | `1:1` | Gemini-only: `1:1` `3:4` `4:3` `9:16` `16:9` |
+| `response_format` | No | `auto` | `url` / `base64` / `auto` |
+| `timeout` | No | `120` | Max wait time in **seconds**. Increase for slow proxies or high-quality models |
 
 Supported model families:
 
