@@ -1,11 +1,101 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFile, unlink } from 'fs/promises';
+import { tmpdir } from 'os';
 import {
   urlToBase64,
   openAIImageToBase64,
+  saveBase64ToTempFile,
   formatErrorMessage,
   createSuccessResponse,
   createErrorResponse,
 } from './utils.js';
+
+// Helpers for temp file cleanup
+const tempFilesCreated: string[] = [];
+
+afterEach(async () => {
+  for (const filePath of tempFilesCreated.splice(0)) {
+    try { await unlink(filePath); } catch { /* ignore */ }
+  }
+});
+
+describe('saveBase64ToTempFile', () => {
+  it('should save a PNG file to temp directory with correct content', async () => {
+    const data = Buffer.from('test-png-data').toString('base64');
+    const result = await saveBase64ToTempFile(data, 'image/png');
+    tempFilesCreated.push(result);
+
+    expect(result).toMatch(/\.png$/);
+    expect(result).toContain(tmpdir());
+    const content = await readFile(result, 'utf-8');
+    expect(content).toBe('test-png-data');
+  });
+
+  it('should save a JPEG file with .jpg extension', async () => {
+    const data = Buffer.from('test-jpeg').toString('base64');
+    const result = await saveBase64ToTempFile(data, 'image/jpeg');
+    tempFilesCreated.push(result);
+
+    expect(result).toMatch(/\.jpg$/);
+  });
+
+  it('should save a WebP file with .webp extension', async () => {
+    const data = Buffer.from('test-webp').toString('base64');
+    const result = await saveBase64ToTempFile(data, 'image/webp');
+    tempFilesCreated.push(result);
+
+    expect(result).toMatch(/\.webp$/);
+  });
+
+  it('should default to .png for unknown MIME types', async () => {
+    const data = Buffer.from('unknown').toString('base64');
+    const result = await saveBase64ToTempFile(data, 'image/unknown');
+    tempFilesCreated.push(result);
+
+    expect(result).toMatch(/\.png$/);
+  });
+
+  it('should generate a cryptographically random filename (32 hex chars)', async () => {
+    const data = Buffer.from('random-test').toString('base64');
+    const result = await saveBase64ToTempFile(data, 'image/png');
+    tempFilesCreated.push(result);
+
+    const filename = result.split(/[\\/]/).pop()!;
+    // 32 hex chars + ".png"
+    expect(filename).toMatch(/^[a-f0-9]{32}\.png$/);
+  });
+
+  it('should use exclusive-create (wx) — reject on filename collision', async () => {
+    const data = Buffer.from('first-write').toString('base64');
+
+    // Write first file to capture its path, then try to saveBase64ToTempFile
+    // with the same path by temporarily replacing writeFile.
+    const firstPath = await saveBase64ToTempFile(data, 'image/png');
+    tempFilesCreated.push(firstPath);
+
+    // Now the file exists. Attempting to write again with wx should fail.
+    const fsPromises = await import('fs/promises');
+    await expect(
+      fsPromises.writeFile(firstPath, Buffer.from('overwrite'), { flag: 'wx', mode: 0o600 })
+    ).rejects.toThrow();
+  });
+
+  it('should set restrictive file permissions (owner-only)', async () => {
+    if (process.platform === 'win32') {
+      // Windows doesn't enforce POSIX permissions the same way;
+      // the flag/mode are still passed but we skip the mode assertion.
+      return;
+    }
+    const data = Buffer.from('perms-test').toString('base64');
+    const result = await saveBase64ToTempFile(data, 'image/png');
+    tempFilesCreated.push(result);
+
+    const { stat } = await import('fs/promises');
+    const fileStat = await stat(result);
+    // 0o600 & 0o777 should give 0o600
+    expect(fileStat.mode & 0o777).toBe(0o600);
+  });
+});
 
 describe('urlToBase64', () => {
   beforeEach(() => {

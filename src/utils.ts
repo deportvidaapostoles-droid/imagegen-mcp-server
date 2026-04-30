@@ -26,7 +26,10 @@ function mimeToExtension(mimeType: string): string {
  * Save base64-encoded image data to a temporary file with a
  * cryptographically random filename. Returns the absolute file path.
  *
- * Security: random filenames prevent path-traversal and overwrite attacks.
+ * Security: uses `wx` (exclusive-create) flag to prevent overwrite attacks
+ * and `mode: 0o600` for owner-only read/write permissions. Combined with
+ * `crypto.randomBytes(16)` filenames, path-traversal and collision attacks
+ * are infeasible.
  */
 export async function saveBase64ToTempFile(
   data: string,
@@ -36,7 +39,7 @@ export async function saveBase64ToTempFile(
   const filename = `${randomBytes(16).toString("hex")}${ext}`;
   const filePath = join(tmpdir(), filename);
   const buffer = Buffer.from(data, "base64");
-  await writeFile(filePath, buffer);
+  await writeFile(filePath, buffer, { flag: "wx", mode: 0o600 });
   return filePath;
 }
 

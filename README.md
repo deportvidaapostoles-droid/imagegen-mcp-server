@@ -71,7 +71,7 @@ The `response_format` parameter controls how image URLs and file paths are retur
 | `base64` | Returns `ImageContent` blocks only (forces `b64_json` for OpenAI). |
 | `url` | **Always returns a file path or URL** in the response text: <br>• If the API returns a `url` → `Image URL: https://...` <br>• If the API returns only base64 → the image is saved to `os.tmpdir()` with a random filename → `Saved to: /tmp/abc123.png` |
 
-> **Security**: files saved to the temp directory use `crypto.randomBytes(16)` for filenames — no path-traversal risk, no file-overwrite collisions.
+> **Security**: files saved to the temp directory use `crypto.randomBytes(16)` for filenames with `wx` (exclusive-create) and `0o600` (owner-only) flags — no path-traversal risk, no file-overwrite collisions.
 
 ### Usage
 

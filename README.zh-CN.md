@@ -71,7 +71,7 @@ cp .env.example .env  # 填入 API Key
 | `base64` | 仅返回 `ImageContent`（OpenAI 强制 `b64_json`）。 |
 | `url` | **一定返回文件路径或 URL**：<br>• 如果 API 返回了 `url` → 响应文本包含 `Image URL: https://...` <br>• 如果 API 只返回 base64 → 图片以随机文件名保存到 `os.tmpdir()` → 响应文本包含 `Saved to: /tmp/abc123.png` |
 
-> **安全性**：保存到临时目录的文件使用 `crypto.randomBytes(16)` 生成随机文件名，无路径遍历风险，无文件名冲突。
+> **安全性**：保存到临时目录的文件使用 `crypto.randomBytes(16)` 生成随机文件名，配合 `wx`（独占创建）和 `0o600`（仅所有者可读写）标志，无路径遍历风险，无文件名冲突。
 
 ### 使用方式
 

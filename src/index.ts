@@ -192,7 +192,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content.push({ type: "text", text: `Image URL: ${img.url}` });
           }
 
-          const imageData = await openAIImageToBase64(img);
+          let imageData;
+          try {
+            imageData = await openAIImageToBase64(img);
+          } catch (error) {
+            content.push({
+              type: "text",
+              text: `Warning: Failed to convert image to base64${
+                img.url ? ` for URL ${img.url}` : ""
+              }: ${error instanceof Error ? error.message : String(error)}`,
+            });
+            continue;
+          }
+
           if (!imageData) {
             continue;
           }
@@ -208,6 +220,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (!content.some((item) => item.type === "image")) {
+          // If we have URL text content, that's still a valid response for url mode
+          if (response_format === "url" && content.some((item) => item.type === "text")) {
+            return { content };
+          }
           throw new Error("No image data returned from OpenAI");
         }
 
