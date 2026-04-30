@@ -1,6 +1,6 @@
 {
   "name": "@ayaka209/assets-gen-mcp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "MCP server for image generation, supports OpenAI DALL-E and Google Gemini",
   "type": "module",
   "main": "dist/index.js",

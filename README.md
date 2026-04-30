@@ -53,7 +53,7 @@ cp .env.example .env
 | `quality` | No | `standard` | `high`/`medium`/`low`/`standard` (gpt-image-*) or `hd`/`standard` (dall-e-3) |
 | `n` | No | `1` | Number of images (gpt-image-*: 1–10; dall-e-3: 1; Gemini: 1) |
 | `aspect_ratio` | No | `1:1` | Gemini-only: `1:1` `3:4` `4:3` `9:16` `16:9` |
-| `response_format` | No | `auto` | `url` / `base64` / `auto` |
+| `response_format` | No | `auto` | `url` / `base64` / `auto` — see [Response Format](#response-format) below |
 | `timeout` | No | `120` | Max wait time in **seconds**. Increase for slow proxies or high-quality models |
 
 Supported model families:
@@ -61,7 +61,19 @@ Supported model families:
 - **OpenAI / OpenAI-compatible**: `gpt-image-2`, `gpt-image-1`, `dall-e-3`, `dall-e-2`, `doubao-*`, `volcengine/doubao-*`
 - **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-3.0-generate-001`
 
-## Usage
+### Response Format
+
+The `response_format` parameter controls how image URLs and file paths are returned alongside the base64 `ImageContent` blocks:
+
+| Value | Behavior |
+|-------|----------|
+| `auto` (default) | Returns `ImageContent` blocks only. Gemini always gets base64; OpenAI-compatible models use the provider default. |
+| `base64` | Returns `ImageContent` blocks only (forces `b64_json` for OpenAI). |
+| `url` | **Always returns a file path or URL** in the response text: <br>• If the API returns a `url` → `Image URL: https://...` <br>• If the API returns only base64 → the image is saved to `os.tmpdir()` with a random filename → `Saved to: /tmp/abc123.png` |
+
+> **Security**: files saved to the temp directory use `crypto.randomBytes(16)` for filenames — no path-traversal risk, no file-overwrite collisions.
+
+### Usage
 
 ### Claude Desktop / Kiro (stdio mode)
 

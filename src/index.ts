@@ -23,7 +23,7 @@ import {
   validateGptImageParams,
 } from "./providers.js";
 import { TOOLS } from "./tools.js";
-import { createErrorResponse, formatErrorMessage, openAIImageToBase64 } from "./utils.js";
+import { createErrorResponse, formatErrorMessage, openAIImageToBase64, saveBase64ToTempFile } from "./utils.js";
 import type { AspectRatio, ImageQuality } from "./validators.js";
 
 loadDotEnv();
@@ -156,9 +156,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const openAIResponseFormat =
-          !isGptImageModel && response_format === "base64"
+          response_format === "base64"
             ? "b64_json"
-            : !isGptImageModel && response_format === "url"
+            : response_format === "url"
               ? "url"
               : undefined;
 
@@ -187,9 +187,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Convert all images to MCP ImageContent
         for (const img of response.data) {
+          // Preserve the original URL when response_format is "url"
+          if (response_format === "url" && img.url) {
+            content.push({ type: "text", text: `Image URL: ${img.url}` });
+          }
+
           const imageData = await openAIImageToBase64(img);
           if (!imageData) {
             continue;
+          }
+
+          // When response_format is "url" but the API returned no URL (only base64),
+          // save to a temp file so the caller gets a file path.
+          if (response_format === "url" && !img.url) {
+            const filePath = await saveBase64ToTempFile(imageData.data, imageData.mimeType);
+            content.push({ type: "text", text: `Saved to: ${filePath}` });
           }
 
           content.push({ type: "image", data: imageData.data, mimeType: imageData.mimeType });
@@ -273,6 +285,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         for (const r of results) {
           if (r.data && r.mimeType) {
+            // When response_format is "url", save to a temp file and return path
+            if (response_format === "url") {
+              const filePath = await saveBase64ToTempFile(r.data, r.mimeType);
+              content.push({ type: "text", text: `Saved to: ${filePath}` });
+            }
+
             content.push({ type: "image", data: r.data, mimeType: r.mimeType });
           } else if (r.text) {
             content.push({ type: "text", text: r.text });

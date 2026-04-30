@@ -53,7 +53,7 @@ cp .env.example .env  # 填入 API Key
 | `quality` | 否 | `standard` | gpt-image-* 支持 `high`/`medium`/`low`/`standard`；dall-e-3 支持 `hd`/`standard` |
 | `n` | 否 | `1` | 生成数量（gpt-image-*: 1–10；dall-e-3: 1；Gemini: 1） |
 | `aspect_ratio` | 否 | `1:1` | 宽高比，仅 Gemini 有效：`1:1` `3:4` `4:3` `9:16` `16:9` |
-| `response_format` | 否 | `auto` | `url` / `base64` / `auto` |
+| `response_format` | 否 | `auto` | `url` / `base64` / `auto` — 详见下方 [响应格式](#响应格式) |
 | `timeout` | 否 | `120` | 最长等待时间（**秒**）。代理慢或使用高质量模型时可适当增大 |
 
 支持的模型：
@@ -61,7 +61,19 @@ cp .env.example .env  # 填入 API Key
 - **OpenAI / OpenAI-compatible**: `gpt-image-2`, `gpt-image-1`, `dall-e-3`, `dall-e-2`, `doubao-*`, `volcengine/doubao-*`
 - **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-3.0-generate-001`
 
-## 使用方式
+### 响应格式
+
+`response_format` 控制在 base64 `ImageContent` 之外是否返回图片 URL 或本地文件路径：
+
+| 值 | 行为 |
+|-------|----------|
+| `auto`（默认） | 仅返回 `ImageContent`。Gemini 固定返回 base64；OpenAI 兼容模型使用 provider 默认格式。 |
+| `base64` | 仅返回 `ImageContent`（OpenAI 强制 `b64_json`）。 |
+| `url` | **一定返回文件路径或 URL**：<br>• 如果 API 返回了 `url` → 响应文本包含 `Image URL: https://...` <br>• 如果 API 只返回 base64 → 图片以随机文件名保存到 `os.tmpdir()` → 响应文本包含 `Saved to: /tmp/abc123.png` |
+
+> **安全性**：保存到临时目录的文件使用 `crypto.randomBytes(16)` 生成随机文件名，无路径遍历风险，无文件名冲突。
+
+### 使用方式
 
 ### Claude Desktop / Kiro（stdio 模式）
 

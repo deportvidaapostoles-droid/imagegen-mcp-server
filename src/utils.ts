@@ -2,6 +2,44 @@
  * Utility functions for the assets-gen-mcp server
  */
 
+import { writeFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { randomBytes } from "crypto";
+
+/**
+ * Map MIME type to file extension for common image formats.
+ */
+function mimeToExtension(mimeType: string): string {
+  const map: Record<string, string> = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+  };
+  return map[mimeType] || ".png";
+}
+
+/**
+ * Save base64-encoded image data to a temporary file with a
+ * cryptographically random filename. Returns the absolute file path.
+ *
+ * Security: random filenames prevent path-traversal and overwrite attacks.
+ */
+export async function saveBase64ToTempFile(
+  data: string,
+  mimeType: string,
+): Promise<string> {
+  const ext = mimeToExtension(mimeType);
+  const filename = `${randomBytes(16).toString("hex")}${ext}`;
+  const filePath = join(tmpdir(), filename);
+  const buffer = Buffer.from(data, "base64");
+  await writeFile(filePath, buffer);
+  return filePath;
+}
+
 /**
  * Convert an image URL to base64 encoded data
  * @param url - The URL of the image to convert
