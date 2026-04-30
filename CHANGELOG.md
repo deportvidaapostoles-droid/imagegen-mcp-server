@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.5] — 2026-04-30
+
+### Fixed
+
+- **Precise url-mode fallback** — the `response_format: "url"` guard only accepts explicit `Image URL:` or `Saved to:` text blocks, preventing false-positive responses from Revised prompt or warning text.
+- **Error propagation in non-url modes** — `openAIImageToBase64` conversion failures are only swallowed in url mode when a URL was already surfaced; other modes rethrow to preserve the root cause.
+- **Exclusive-create (`wx`) flag** — temp files now use `{ flag: "wx", mode: 0o600 }` to prevent overwrite attacks and restrict permissions to owner-only.
+
+### Added
+
+- **Unit tests for `saveBase64ToTempFile`** — 7 tests covering PNG/JPEG/WebP extensions, unknown MIME fallback, random filename format, wx collision guard, and file permissions.
+
 ## [0.1.4] — 2026-04-30
 
 ### Fixed
