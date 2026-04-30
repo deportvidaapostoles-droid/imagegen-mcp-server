@@ -186,23 +186,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         // Convert all images to MCP ImageContent
+        let hasUrlOrSavedPath = false;
+
         for (const img of response.data) {
           // Preserve the original URL when response_format is "url"
           if (response_format === "url" && img.url) {
             content.push({ type: "text", text: `Image URL: ${img.url}` });
+            hasUrlOrSavedPath = true;
           }
 
           let imageData;
           try {
             imageData = await openAIImageToBase64(img);
           } catch (error) {
-            content.push({
-              type: "text",
-              text: `Warning: Failed to convert image to base64${
-                img.url ? ` for URL ${img.url}` : ""
-              }: ${error instanceof Error ? error.message : String(error)}`,
-            });
-            continue;
+            // In url mode with a URL already surfaced, downgrade to warning
+            // so the caller still gets the URL. In other modes, let it propagate.
+            if (response_format === "url" && img.url) {
+              content.push({
+                type: "text",
+                text: `Warning: Failed to convert image to base64 for URL ${img.url}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              });
+              continue;
+            }
+            throw error;
           }
 
           if (!imageData) {
@@ -214,14 +222,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (response_format === "url" && !img.url) {
             const filePath = await saveBase64ToTempFile(imageData.data, imageData.mimeType);
             content.push({ type: "text", text: `Saved to: ${filePath}` });
+            hasUrlOrSavedPath = true;
           }
 
           content.push({ type: "image", data: imageData.data, mimeType: imageData.mimeType });
         }
 
         if (!content.some((item) => item.type === "image")) {
-          // If we have URL text content, that's still a valid response for url mode
-          if (response_format === "url" && content.some((item) => item.type === "text")) {
+          // In url mode, explicit URL/path text is a valid fallback response
+          if (response_format === "url" && hasUrlOrSavedPath) {
             return { content };
           }
           throw new Error("No image data returned from OpenAI");

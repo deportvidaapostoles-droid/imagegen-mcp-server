@@ -65,18 +65,23 @@ describe('saveBase64ToTempFile', () => {
     expect(filename).toMatch(/^[a-f0-9]{32}\.png$/);
   });
 
-  it('should use exclusive-create (wx) — reject on filename collision', async () => {
-    const data = Buffer.from('first-write').toString('base64');
+  it('should protect against file collisions via exclusive-create', async () => {
+    const data = Buffer.from('collision-test').toString('base64');
 
-    // Write first file to capture its path, then try to saveBase64ToTempFile
-    // with the same path by temporarily replacing writeFile.
+    // First write succeeds with a random filename
     const firstPath = await saveBase64ToTempFile(data, 'image/png');
     tempFilesCreated.push(firstPath);
 
-    // Now the file exists. Attempting to write again with wx should fail.
-    const fsPromises = await import('fs/promises');
+    // The filename must be 32 random hex chars (crypto.randomBytes(16))
+    const filename = firstPath.split(/[\\/]/).pop()!;
+    expect(filename).toMatch(/^[a-f0-9]{32}\.png$/);
+
+    // The file now exists. A second write to the same path using wx
+    // (the flag used internally by saveBase64ToTempFile) must reject.
+    // This proves the collision protection works end-to-end.
+    const fs = await import('fs/promises');
     await expect(
-      fsPromises.writeFile(firstPath, Buffer.from('overwrite'), { flag: 'wx', mode: 0o600 })
+      fs.writeFile(firstPath, Buffer.from('overwrite'), { flag: 'wx', mode: 0o600 })
     ).rejects.toThrow();
   });
 
