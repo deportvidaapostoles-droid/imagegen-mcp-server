@@ -67,7 +67,7 @@ cp .env.example .env  # 填入 API Key
 
 | 值 | 行为 |
 |-------|----------|
-| `auto`（默认） | 仅返回 `ImageContent`。Gemini 固定返回 base64；OpenAI 兼容模型使用 provider 默认格式。 |
+| `auto`（默认） | **一定返回本地文件路径** 的响应文本（`Saved to: /tmp/abc123.png`），同时附带 base64 `ImageContent`。图片以随机文件名保存到 `os.tmpdir()`。这是最兼容的模式，无论 provider 默认返回什么格式，都能保证图片始终可访问。 |
 | `base64` | 仅返回 `ImageContent`（OpenAI 强制 `b64_json`）。 |
 | `url` | **一定返回文件路径或 URL**：<br>• 如果 API 返回了 `url` → 响应文本包含 `Image URL: https://...` <br>• 如果 API 只返回 base64 → 图片以随机文件名保存到 `os.tmpdir()` → 响应文本包含 `Saved to: /tmp/abc123.png` |
 

@@ -67,7 +67,7 @@ The `response_format` parameter controls how image URLs and file paths are retur
 
 | Value | Behavior |
 |-------|----------|
-| `auto` (default) | Returns `ImageContent` blocks only. Gemini always gets base64; OpenAI-compatible models use the provider default. |
+| `auto` (default) | **Always returns a local file path** in the response text (`Saved to: /tmp/abc123.png`) alongside the base64 `ImageContent` block. Images are saved to `os.tmpdir()` with a random filename. This mode is the most compatible and ensures the image is always accessible regardless of the provider's default response format. |
 | `base64` | Returns `ImageContent` blocks only (forces `b64_json` for OpenAI). |
 | `url` | **Always returns a file path or URL** in the response text: <br>• If the API returns a `url` → `Image URL: https://...` <br>• If the API returns only base64 → the image is saved to `os.tmpdir()` with a random filename → `Saved to: /tmp/abc123.png` |
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.6] — 2026-05-07
+
+### Changed
+
+- **`response_format: "auto"` now always saves images to temporary files** — both OpenAI-compatible and Gemini paths. Previously, `auto` only returned `ImageContent` blocks. Now `auto` behaves like a safer default: it persists every image to `os.tmpdir()` with a cryptographically random filename, then returns `Saved to: /path/to/file.png` alongside the base64 `ImageContent`. This ensures callers always have a local file path regardless of the provider's default response format.
+
+### Updated
+
+- Tool description for `response_format` updated to clarify that `auto` saves to a temporary local file and returns both the path and the inline image.
+- README / README.zh-CN updated to reflect the new `auto` behavior.
+
 ## [0.1.5] — 2026-04-30
 
 ### Fixed

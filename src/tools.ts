@@ -78,7 +78,7 @@ export const GENERATE_IMAGE_TOOL: Tool = {
           "How images are returned in the MCP response. " +
           "'base64': inline base64-encoded image data (works offline, larger payload). " +
           "'url': public URL valid for ~60 minutes (OpenAI only; not supported by all proxies). " +
-          "'auto' (default): uses base64 for Gemini, and the provider default for OpenAI-compatible models.",
+          "'auto' (default): saves the image to a temporary local file and returns both the file path and the inline base64 image data. This mode is the most compatible and ensures the image is always accessible regardless of provider defaults.",
         enum: ["url", "base64", "auto"],
         default: "auto",
       },
