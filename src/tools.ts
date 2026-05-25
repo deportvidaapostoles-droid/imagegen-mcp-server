@@ -61,7 +61,7 @@ export const GENERATE_IMAGE_TOOL: Tool = {
         type: "number",
         description:
           "Maximum time in seconds to wait for the image generation API to respond. " +
-          "Defaults to the IMAGEGEN_TIMEOUT environment variable (300 s if unset). " +
+          "Defaults to 300 s. Increase this if the request times out. " +
           "The tool returns an error if the provider does not respond within this limit.",
       },
     },
@@ -134,7 +134,7 @@ export const EDIT_IMAGE_TOOL: Tool = {
         type: "number",
         description:
           "Maximum time in seconds to wait for the API to respond. " +
-          "Defaults to the IMAGEGEN_TIMEOUT environment variable (300 s if unset).",
+          "Defaults to 300 s. Increase this if the request times out.",
       },
     },
     required: ["image", "prompt"],
