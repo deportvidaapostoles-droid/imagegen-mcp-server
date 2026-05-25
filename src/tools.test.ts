@@ -6,114 +6,134 @@ import {
   isValidToolName,
 } from './tools.js';
 
-describe('GENERATE_IMAGE_TOOL', () => {
-  it('should have correct name', () => {
-    expect(TOOLS[0].name).toBe('generate_image');
+// TOOLS is created with ("openai", 300) for static access
+
+describe('OpenAI provider tools', () => {
+  const [gen, edit] = TOOLS;
+  const genSchema = gen.inputSchema as any;
+  const editSchema = edit.inputSchema as any;
+
+  it('generate_image should mention OpenAI in description', () => {
+    expect(gen.description).toContain('OpenAI');
   });
 
-  it('should have description', () => {
-    expect(TOOLS[0].description).toBeTruthy();
-    expect(TOOLS[0].description).toContain('image');
+  it('generate_image should expose size (OpenAI)', () => {
+    expect(genSchema.properties.size).toBeDefined();
   });
 
-  it('should have inputSchema with required prompt', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.type).toBe('object');
-    expect(schema.required).toContain('prompt');
+  it('generate_image should expose quality (OpenAI)', () => {
+    expect(genSchema.properties.quality).toBeDefined();
   });
 
-  it('should define prompt property', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.properties.prompt).toBeDefined();
-    expect(schema.properties.prompt.type).toBe('string');
+  it('generate_image should expose n (OpenAI)', () => {
+    expect(genSchema.properties.n).toBeDefined();
   });
 
-  it('should NOT have model property (model is from env)', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.properties.model).toBeUndefined();
+  it('generate_image should NOT expose aspect_ratio (Gemini-only)', () => {
+    expect(genSchema.properties.aspect_ratio).toBeUndefined();
   });
 
-  it('should NOT have response_format property (always base64)', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.properties.response_format).toBeUndefined();
+  it('edit_image should mention OpenAI in description', () => {
+    expect(edit.description).toContain('OpenAI');
   });
 
-  it('should define size property', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.properties.size).toBeDefined();
+  it('edit_image should expose mask (OpenAI)', () => {
+    expect(editSchema.properties.mask).toBeDefined();
   });
 
-  it('should define quality property', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.properties.quality).toBeDefined();
-    expect(schema.properties.quality.enum).toContain('standard');
-    expect(schema.properties.quality.enum).toContain('hd');
+  it('edit_image should expose size (OpenAI)', () => {
+    expect(editSchema.properties.size).toBeDefined();
   });
 
-  it('should define aspect_ratio property', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.properties.aspect_ratio).toBeDefined();
-    expect(schema.properties.aspect_ratio.enum).toContain('1:1');
-    expect(schema.properties.aspect_ratio.enum).toContain('16:9');
-  });
-
-  it('should define timeout property without hardcoded default', () => {
-    const schema = TOOLS[0].inputSchema as any;
-    expect(schema.properties.timeout).toBeDefined();
-    expect(schema.properties.timeout.type).toBe('number');
-    // timeout default comes from IMAGEGEN_TIMEOUT env var, not hardcoded in schema
-    expect(schema.properties.timeout.default).toBeUndefined();
+  it('edit_image should NOT expose aspect_ratio (Gemini-only)', () => {
+    expect(editSchema.properties.aspect_ratio).toBeUndefined();
   });
 });
 
-describe('EDIT_IMAGE_TOOL', () => {
-  it('should have correct name', () => {
-    expect(TOOLS[1].name).toBe('edit_image');
+describe('Gemini provider tools', () => {
+  const tools = createTools('gemini', 300);
+  const [gen, edit] = tools;
+  const genSchema = gen.inputSchema as any;
+  const editSchema = edit.inputSchema as any;
+
+  it('generate_image should mention Gemini in description', () => {
+    expect(gen.description).toContain('Gemini');
   });
 
-  it('should have description', () => {
-    expect(TOOLS[1].description).toBeTruthy();
-    expect(TOOLS[1].description).toContain('edit');
+  it('generate_image should expose aspect_ratio (Gemini)', () => {
+    expect(genSchema.properties.aspect_ratio).toBeDefined();
   });
 
-  it('should require image and prompt', () => {
-    const schema = TOOLS[1].inputSchema as any;
-    expect(schema.required).toContain('image');
-    expect(schema.required).toContain('prompt');
+  it('generate_image should NOT expose size (OpenAI-only)', () => {
+    expect(genSchema.properties.size).toBeUndefined();
   });
 
-  it('should define image property', () => {
-    const schema = TOOLS[1].inputSchema as any;
-    expect(schema.properties.image).toBeDefined();
-    expect(schema.properties.image.type).toBe('string');
+  it('generate_image should NOT expose quality (OpenAI-only)', () => {
+    expect(genSchema.properties.quality).toBeUndefined();
   });
 
-  it('should define mask property (optional)', () => {
-    const schema = TOOLS[1].inputSchema as any;
-    expect(schema.properties.mask).toBeDefined();
-    expect(schema.properties.mask.type).toBe('string');
+  it('generate_image should NOT expose n (OpenAI-only)', () => {
+    expect(genSchema.properties.n).toBeUndefined();
   });
 
-  it('should NOT have model property', () => {
-    const schema = TOOLS[1].inputSchema as any;
-    expect(schema.properties.model).toBeUndefined();
+  it('edit_image should mention Gemini in description', () => {
+    expect(edit.description).toContain('Gemini');
   });
 
-  it('should NOT have response_format property', () => {
-    const schema = TOOLS[1].inputSchema as any;
-    expect(schema.properties.response_format).toBeUndefined();
+  it('edit_image should expose aspect_ratio (Gemini)', () => {
+    expect(editSchema.properties.aspect_ratio).toBeDefined();
+  });
+
+  it('edit_image should NOT expose mask (OpenAI-only)', () => {
+    expect(editSchema.properties.mask).toBeUndefined();
+  });
+
+  it('edit_image should NOT expose size (OpenAI-only)', () => {
+    expect(editSchema.properties.size).toBeUndefined();
   });
 });
 
-describe('TOOLS', () => {
-  it('should contain both tools', () => {
-    expect(TOOLS.length).toBe(2);
-    expect(TOOLS[0].name).toBe('generate_image');
-    expect(TOOLS[1].name).toBe('edit_image');
+describe('Provider-agnostic', () => {
+  it('should always have prompt in generate_image', () => {
+    for (const p of ['openai', 'gemini'] as const) {
+      const [gen] = createTools(p, 300);
+      const schema = gen.inputSchema as any;
+      expect(schema.required).toContain('prompt');
+      expect(schema.properties.prompt).toBeDefined();
+    }
   });
 
-  it('should have exactly 2 tools', () => {
-    expect(TOOLS.length).toBe(2);
+  it('should always have image + prompt in edit_image', () => {
+    for (const p of ['openai', 'gemini'] as const) {
+      const [, edit] = createTools(p, 300);
+      const schema = edit.inputSchema as any;
+      expect(schema.required).toContain('image');
+      expect(schema.required).toContain('prompt');
+    }
+  });
+
+  it('should always have timeout', () => {
+    for (const p of ['openai', 'gemini'] as const) {
+      const [gen, edit] = createTools(p, 300);
+      expect((gen.inputSchema as any).properties.timeout).toBeDefined();
+      expect((edit.inputSchema as any).properties.timeout).toBeDefined();
+    }
+  });
+
+  it('timeout description should reflect custom value', () => {
+    const [gen] = createTools('openai', 600);
+    const desc = (gen.inputSchema as any).properties.timeout.description;
+    expect(desc).toContain('600');
+  });
+
+  it('should never expose model or response_format', () => {
+    for (const p of ['openai', 'gemini'] as const) {
+      const [gen, edit] = createTools(p, 300);
+      expect((gen.inputSchema as any).properties.model).toBeUndefined();
+      expect((gen.inputSchema as any).properties.response_format).toBeUndefined();
+      expect((edit.inputSchema as any).properties.model).toBeUndefined();
+      expect((edit.inputSchema as any).properties.response_format).toBeUndefined();
+    }
   });
 });
 
