@@ -17,7 +17,7 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
     "Supported formats: PNG, JPEG, WebP.";
   const imagesNote =
     provider === "openai"
-      ? " Only the first image is used for editing; additional images are ignored."
+      ? " Multiple images are supported for multi-image editing."
       : " Multiple images are supported for multi-image editing.";
 
   // ── Shared properties ────────────────────────────────────────────────────

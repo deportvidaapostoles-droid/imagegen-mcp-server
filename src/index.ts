@@ -157,17 +157,21 @@ async function handleOpenAIEdit(params: {
 
   const { toFile } = await import("openai");
 
-  // OpenAI images.edit only supports a single image; use the first one
-  const firstImage = params.images[0];
-  if (!firstImage) {
+  // OpenAI images.edit supports multiple images
+  const imageFiles = await Promise.all(
+    params.images.map(async (img, i) => {
+      const parsed = await parseImageInput(img);
+      return toFile(
+        Buffer.from(parsed.data, "base64"),
+        `input_${i}.png`,
+        { type: "image/png" }
+      );
+    })
+  );
+
+  if (imageFiles.length === 0) {
     throw new Error("At least one image is required for editing.");
   }
-
-  const imageFile = await toFile(
-    Buffer.from((await parseImageInput(firstImage)).data, "base64"),
-    "input.png",
-    { type: "image/png" }
-  );
 
   let maskFile;
   if (params.mask) {
@@ -184,7 +188,7 @@ async function handleOpenAIEdit(params: {
   const n = params.n || 1;
 
   const editParams: any = {
-    image: imageFile,
+    image: imageFiles,
     prompt: params.prompt,
     model: MODEL,
     response_format: "b64_json",
