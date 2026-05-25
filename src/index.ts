@@ -23,7 +23,7 @@ import {
   isOpenAIModel,
   isGeminiModel,
 } from "./providers.js";
-import { TOOLS } from "./tools.js";
+import { createTools } from "./tools.js";
 import { createErrorResponse, formatErrorMessage, openAIImageToBase64, parseImageInput } from "./utils.js";
 import type { ImageQuality } from "./validators.js";
 
@@ -65,6 +65,7 @@ if (runtimeConfig.provider === 'gemini' && runtimeConfig.geminiApiKey) {
 const PROVIDER = runtimeConfig.provider;
 const MODEL = runtimeConfig.model;
 const DEFAULT_TIMEOUT = runtimeConfig.timeout;
+const TOOLS = createTools(DEFAULT_TIMEOUT);
 
 // Create server instance
 const server = new Server(
