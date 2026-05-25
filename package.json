@@ -1,11 +1,11 @@
 {
-  "name": "@ayaka209/assets-gen-mcp",
-  "version": "0.1.7",
-  "description": "MCP server for image generation, supports OpenAI DALL-E and Google Gemini",
+  "name": "imagegen-mcp-server",
+  "version": "0.2.0",
+  "description": "MCP server for AI image generation and editing, supports OpenAI and Google Gemini",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "assets-gen-mcp": "dist/index.js"
+    "imagegen-mcp-server": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -28,13 +28,13 @@
   ],
   "author": "",
   "license": "MIT",
-  "homepage": "https://github.com/ayaka209/assets-gen-mcp#readme",
+  "homepage": "https://github.com/ptbsare/imagegen-mcp-server#readme",
   "bugs": {
-    "url": "https://github.com/ayaka209/assets-gen-mcp/issues"
+    "url": "https://github.com/ptbsare/imagegen-mcp-server/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ayaka209/assets-gen-mcp.git"
+    "url": "git+https://github.com/ptbsare/imagegen-mcp-server.git"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",

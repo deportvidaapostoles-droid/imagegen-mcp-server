@@ -3,22 +3,26 @@
  * List available Gemini models from Google AI API
  */
 import { GoogleGenAI } from '@google/genai';
-import { loadDotEnv, resolveConfig } from './config.js';
+import { loadDotEnv, getServerRuntimeConfig } from './config.js';
 
 loadDotEnv();
-const runtimeConfig = resolveConfig();
-runtimeConfig.warnings.forEach((warning) => console.warn(`Config warning: ${warning}`));
+const config = getServerRuntimeConfig();
+config.warnings.forEach((warning) => console.warn(`Config warning: ${warning}`));
 
-const apiKey = runtimeConfig.values.GEMINI_API_KEY;
+if (config.provider !== 'gemini') {
+  console.error('Error: This command requires IMAGEGEN_PROVIDER=gemini');
+  process.exit(1);
+}
 
+const apiKey = config.geminiApiKey;
 if (!apiKey) {
-  console.error('Error: GEMINI_API_KEY not set via CLI, environment, or .env file');
+  console.error('Error: GEMINI_API_KEY not set');
   process.exit(1);
 }
 
 const ai = new GoogleGenAI({
   apiKey,
-  httpOptions: runtimeConfig.values.GEMINI_BASE_URL ? { baseUrl: runtimeConfig.values.GEMINI_BASE_URL } : undefined,
+  httpOptions: config.geminiBaseUrl ? { baseUrl: config.geminiBaseUrl } : undefined,
 });
 
 async function listModels() {
@@ -26,7 +30,7 @@ async function listModels() {
     const pager = await ai.models.list({ config: { pageSize: 100 } });
 
     console.log('Available Gemini Models:\n');
-    console.log('=' .repeat(80));
+    console.log('='.repeat(80));
 
     for await (const model of pager) {
       const name = (model.name || '').replace('models/', '');
@@ -42,10 +46,8 @@ async function listModels() {
 
     console.log('\n' + '='.repeat(80));
     console.log('\nRecommended for image generation:');
-    console.log('  - gemini-2.0-flash (default, fast)');
-    console.log('  - gemini-2.5-flash (latest)');
+    console.log('  - gemini-2.5-flash-image (fast, good quality)');
     console.log('  - gemini-2.0-flash-exp-image-generation (experimental)');
-
   } catch (error) {
     console.error('Failed to fetch models:', error);
     process.exit(1);

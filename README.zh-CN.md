@@ -1,121 +1,80 @@
-# Assets Generation MCP Server
+# ImageGen MCP Server
 
-[English](README.md) | [简体中文](README.zh-CN.md)
-
-AI 图片生成 MCP 服务器，支持 OpenAI 兼容模型和 Google Gemini 双 provider，返回标准 MCP `ImageContent`。
+AI 图片生成与编辑 MCP 服务器，支持 OpenAI 和 Google Gemini 双 Provider，返回标准 MCP `ImageContent`（base64）。
 
 ## 特性
 
-- 根据模型名自动选择 provider（OpenAI / Gemini）
-- 同时配置 OpenAI + Gemini 时，**按模型名选择 provider**；未指定模型时使用 `DEFAULT_MODEL`
-- 图片以 MCP 标准 `ImageContent` 格式返回（`{ type: "image", data, mimeType }`），AI 客户端可直接使用
+- **双工具**：`generate_image`（文生图）+ `edit_image`（图片编辑）
+- **双 Provider**：OpenAI 兼容模型 + Google Gemini
+- **Provider 通过环境变量 `IMAGEGEN_PROVIDER` 显式指定**（`openai` 或 `gemini`），不再从模型名推断
+- **模型通过环境变量 `IMAGEGEN_MODEL` 指定**，工具调用无需传 model 参数
+- **统一返回 base64 MCP ImageContent**，不保存临时文件
 - 支持三种 transport：stdio（默认）、SSE、HTTP
 - 支持自定义 API 代理地址（`OPENAI_BASE_URL` / `GEMINI_BASE_URL`）
-- 支持 `.env` 自动加载，也支持通过 CLI 参数传配置（适合不支持 `env` 的 MCP 客户端）
-- 未配置 API Key 的 provider 自动禁用，不影响另一个 provider 使用
+- 支持 `.env` 自动加载，也支持通过 CLI 参数传配置
 
 ## 快速开始
 
 ```bash
 npm install
 npm run build
-cp .env.example .env  # 填入 API Key
 ```
 
 ## 环境变量
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `GEMINI_API_KEY` | 至少一个 | - | Google Gemini API Key |
-| `OPENAI_API_KEY` | 至少一个 | - | OpenAI API Key |
-| `DEFAULT_MODEL` | 否 | `gemini-2.5-flash-image` | 默认模型，工具调用时可覆盖 |
-| `GEMINI_BASE_URL` | 否 | - | Gemini API 代理地址 |
+| `IMAGEGEN_PROVIDER` | 是 | `openai` | Provider：`openai` 或 `gemini` |
+| `IMAGEGEN_MODEL` | 是 | `gpt-image-1` | 模型名 |
+| `OPENAI_API_KEY` | provider=openai 时必填 | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | 否 | - | OpenAI API 代理地址 |
-| `OPENAI_IMAGE_MODEL` | 否 | `gpt-image-2` | 集成测试时使用的 OpenAI 图片模型 |
+| `GEMINI_API_KEY` | provider=gemini 时必填 | - | Gemini API Key |
+| `GEMINI_BASE_URL` | 否 | - | Gemini API 代理地址 |
 | `MCP_TRANSPORT` | 否 | `stdio` | 传输模式：`stdio` / `sse` / `http` |
-| `MCP_STDIO_LOGS` | 否 | `false` | 在 stdio 模式下启用启动/运行日志（调试时设为 `true`） |
+| `MCP_STDIO_LOGS` | 否 | `false` | stdio 模式下启用日志（调试用） |
 | `MCP_HOST` | 否 | `localhost` | SSE/HTTP 监听地址 |
 | `MCP_PORT` | 否 | `3000` | SSE/HTTP 监听端口 |
 
-> 至少配置 `GEMINI_API_KEY` 或 `OPENAI_API_KEY` 其中一个，未配置的 provider 会自动禁用。
->
-> `.env` 中如果还是示例占位值（如 `your-gemini-api-key`），现在会被自动忽略，不会误判为已启用。
->
-> 配置优先级：**CLI 参数 > 进程环境变量 > 当前工作目录 `.env` > 内置默认值**。
+> 配置优先级：**CLI 参数 > 进程环境变量 > 当前工作目录 `.env` > 内置默认值**
 
-## 工具：`generate_image`
+## 使用方式
 
-| 参数 | 必填 | 默认值 | 说明 |
-|------|------|--------|------|
-| `prompt` | 是 | - | 详细的图片描述 |
-| `model` | 否 | `DEFAULT_MODEL` | 模型名，见下方支持模型列表 |
-| `size` | 否 | `auto` / `1024x1024` | 图片尺寸（仅 OpenAI-compatible 模型有效） |
-| `quality` | 否 | `standard` | gpt-image-* 支持 `high`/`medium`/`low`/`standard`；dall-e-3 支持 `hd`/`standard` |
-| `n` | 否 | `1` | 生成数量（gpt-image-*: 1–10；dall-e-3: 1；Gemini: 1） |
-| `aspect_ratio` | 否 | `1:1` | 宽高比，仅 Gemini 有效：`1:1` `3:4` `4:3` `9:16` `16:9` |
-| `response_format` | 否 | `auto` | `url` / `base64` / `auto` — 详见下方 [响应格式](#响应格式) |
-| `timeout` | 否 | `120` | 最长等待时间（**秒**）。代理慢或使用高质量模型时可适当增大 |
+### npx 直接运行
 
-支持的模型：
+```bash
+# OpenAI
+npx -y imagegen-mcp-server --provider openai --model gpt-image-1
 
-- **OpenAI / OpenAI-compatible**: `gpt-image-2`, `gpt-image-1`, `dall-e-3`, `dall-e-2`, `doubao-*`, `volcengine/doubao-*`
-- **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-3.0-generate-001`
+# Gemini
+npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
+```
 
-### 响应格式
+### 环境变量方式
 
-`response_format` 控制在 base64 `ImageContent` 之外是否返回图片 URL 或本地文件路径：
+```bash
+IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
+  GEMINI_API_KEY=your-key \
+  npx -y imagegen-mcp-server
+```
 
-| 值 | 行为 |
-|-------|----------|
-| `auto`（默认） | **一定返回本地文件路径** 的响应文本（`Saved to: /tmp/abc123.png`），同时附带 base64 `ImageContent`。图片以随机文件名保存到 `os.tmpdir()`。这是最兼容的模式，无论 provider 默认返回什么格式，都能保证图片始终可访问。 |
-| `base64` | 仅返回 `ImageContent`（OpenAI 强制 `b64_json`）。 |
-| `url` | **一定返回文件路径或 URL**：<br>• 如果 API 返回了 `url` → 响应文本包含 `Image URL: https://...` <br>• 如果 API 只返回 base64 → 图片以随机文件名保存到 `os.tmpdir()` → 响应文本包含 `Saved to: /tmp/abc123.png` |
-
-> **安全性**：保存到临时目录的文件使用 `crypto.randomBytes(16)` 生成随机文件名，配合 `wx`（独占创建）和 `0o600`（仅所有者可读写）标志，无路径遍历风险，无文件名冲突。
-
-### 使用方式
-
-### Claude Desktop / Kiro（stdio 模式）
+### Claude Desktop / Cursor（stdio 模式）
 
 ```json
 {
   "mcpServers": {
-    "assets-gen": {
-      "command": "node",
-      "args": ["/path/to/assets-gen-mcp/dist/index.js"],
+    "imagegen": {
+      "command": "npx",
+      "args": ["-y", "imagegen-mcp-server"],
       "env": {
-        "GEMINI_API_KEY": "your-key",
-        "GEMINI_BASE_URL": "https://your-proxy.com"
+        "IMAGEGEN_PROVIDER": "openai",
+        "IMAGEGEN_MODEL": "gpt-image-1",
+        "OPENAI_API_KEY": "sk-...",
+        "OPENAI_BASE_URL": "https://your-proxy.com/v1"
       }
     }
   }
 }
 ```
-
-也可以不用 `env`，直接走 `args`：
-
-```json
-{
-  "mcpServers": {
-    "assets-gen": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@ayaka209/assets-gen-mcp",
-        "--openai-api-key",
-        "your-key",
-        "--openai-base-url",
-        "https://your-proxy.com/gptapi",
-        "--default-model",
-        "gpt-image-2"
-      ]
-    }
-  }
-}
-```
-
-macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`  
-Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`
 
 ### MCP SDK Client（编程接入）
 
@@ -124,99 +83,88 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const transport = new StdioClientTransport({
-  command: "node",
-  args: ["dist/index.js"],
-  env: { GEMINI_API_KEY: "your-key" },
+  command: "npx",
+  args: ["-y", "imagegen-mcp-server"],
+  env: {
+    IMAGEGEN_PROVIDER: "gemini",
+    IMAGEGEN_MODEL: "gemini-2.5-flash-image",
+    GEMINI_API_KEY: "your-key",
+  },
 });
 const client = new Client({ name: "my-app", version: "1.0.0" }, { capabilities: {} });
 await client.connect(transport);
 
+// Generate
 const result = await client.callTool({
   name: "generate_image",
   arguments: { prompt: "A cat in space" },
 });
-// result.content → [{ type: "image", data: "<base64>", mimeType: "image/png" }]
+
+// Edit
+const editResult = await client.callTool({
+  name: "edit_image",
+  arguments: {
+    image: "/path/to/image.png",
+    prompt: "Add a rainbow in the sky",
+  },
+});
 ```
 
-### Provider 选择规则
+## 工具列表
 
-1. 工具调用里**显式传了 `model`**：按 `model` 前缀选 provider
-2. 工具调用里**没传 `model`**：使用 `DEFAULT_MODEL`
-3. `gpt-image-*` / `dall-e-*` / `doubao-*` / `volcengine/doubao-*` → OpenAI-compatible；`gemini-*` / `imagen-*` → Gemini
-4. 你的当前 `.env` 如果保持 `DEFAULT_MODEL=gpt-image-2`，那么**默认会走 OpenAI**
+### `generate_image`
 
-### SSE / HTTP 模式
+| 参数 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `prompt` | 是 | - | 详细的图片描述 |
+| `size` | 否 | provider 相关 | 图片尺寸（仅 OpenAI） |
+| `quality` | 否 | `standard` | 图片质量 |
+| `n` | 否 | `1` | 生成数量 |
+| `aspect_ratio` | 否 | `1:1` | 宽高比（仅 Gemini） |
+| `timeout` | 否 | `120` | 超时秒数 |
+
+### `edit_image`
+
+| 参数 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `image` | 是 | - | 图片路径或 base64 字符串 |
+| `prompt` | 是 | - | 编辑描述 |
+| `mask` | 否 | - | 遮罩图片（仅 OpenAI） |
+| `size` | 否 | provider 相关 | 输出尺寸（仅 OpenAI） |
+| `quality` | 否 | `standard` | 图片质量（仅 OpenAI） |
+| `n` | 否 | `1` | 生成数量 |
+| `aspect_ratio` | 否 | `1:1` | 宽高比（仅 Gemini） |
+| `timeout` | 否 | `120` | 超时秒数 |
+
+## 支持的模型
+
+- **OpenAI / OpenAI-compatible**: `gpt-image-1`, `gpt-image-2`, `dall-e-3`, `dall-e-2`, `doubao-*`, `volcengine/doubao-*`
+- **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-*`
+
+## SSE / HTTP 模式
 
 ```bash
-MCP_TRANSPORT=sse MCP_PORT=3000 node dist/index.js
+MCP_TRANSPORT=sse MCP_PORT=3000 npx -y imagegen-mcp-server
 ```
 
 端点：
-
 - `GET /sse` — SSE 连接
 - `POST /message?sessionId=xxx` — 发送消息
 - `GET /` — 健康检查
 
-### OpenAI 兼容代理联调
-
-```bash
-OPENAI_API_KEY=your-key
-OPENAI_BASE_URL=https://your-openai-compatible-endpoint
-OPENAI_IMAGE_MODEL=gpt-image-2
-npm run test:integration
-```
-
-如果你只想做一次快速真实联调，可以直接跑：
-
-```bash
-OPENAI_API_KEY=your-key
-OPENAI_BASE_URL=https://your-openai-compatible-endpoint
-OPENAI_IMAGE_MODEL=gpt-image-2
-npm run test:openai-proxy
-```
-
-这个脚本会依次验证：
-
-1. 直连 `OPENAI_BASE_URL` 的 `images.generate`
-2. 启动本仓库 MCP 服务后，通过 `generate_image` 走一遍 stdio 链路
-
-如果只想检查代理实际暴露了哪些 OpenAI 模型：
-
-```bash
-OPENAI_API_KEY=your-key
-OPENAI_BASE_URL=https://your-openai-compatible-endpoint
-npm run models:openai
-```
-
-如果 MCP 客户端不支持传 `env`，可以直接这样启动：
-
-```bash
-npx -y @ayaka209/assets-gen-mcp --openai-api-key sk-... --openai-base-url https://your-openai-compatible-endpoint --default-model gpt-image-2
-```
-
-查看所有 CLI 参数：
-
-```bash
-npx -y @ayaka209/assets-gen-mcp --help
-```
-
 ## 开发
 
 ```bash
-npm run build             # 编译
-npm run watch             # 监听编译
-npm test                  # 单元测试
-npm run test:integration  # 集成测试（需要 API Key）
-npm run test:openai-proxy # 一键测试 OpenAI 兼容代理
-npm run models:openai     # 列出代理可见的 OpenAI 模型
-npm run models            # 列出可用 Gemini 模型
+npm run build       # 编译
+npm run watch       # 监听编译
+npm test            # 单元测试
 ```
 
 ## 技术栈
 
-- [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) — MCP 服务端/客户端 SDK
-- [`@google/genai`](https://www.npmjs.com/package/@google/genai) — Google Gemini SDK
-- [`openai`](https://www.npmjs.com/package/openai) — OpenAI SDK
+- `@modelcontextprotocol/sdk` — MCP SDK
+- `@google/genai` — Google Gemini SDK
+- `openai` — OpenAI SDK
 
 ## License
 

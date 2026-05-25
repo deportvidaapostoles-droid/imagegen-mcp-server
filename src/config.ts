@@ -1,9 +1,11 @@
 import { config as loadDotEnvFile } from 'dotenv';
 
 export type TransportMode = 'stdio' | 'sse' | 'http';
+export type ProviderType = 'openai' | 'gemini';
 
 export type ConfigKey =
-  | 'DEFAULT_MODEL'
+  | 'IMAGEGEN_PROVIDER'
+  | 'IMAGEGEN_MODEL'
   | 'OPENAI_API_KEY'
   | 'OPENAI_BASE_URL'
   | 'GEMINI_API_KEY'
@@ -16,7 +18,8 @@ export type ConfigKey =
   | 'OPENAI_IMAGE_PROMPT';
 
 const CLI_FLAG_TO_CONFIG_KEY: Record<string, ConfigKey> = {
-  'default-model': 'DEFAULT_MODEL',
+  'provider': 'IMAGEGEN_PROVIDER',
+  'model': 'IMAGEGEN_MODEL',
   'openai-api-key': 'OPENAI_API_KEY',
   'openai-base-url': 'OPENAI_BASE_URL',
   'gemini-api-key': 'GEMINI_API_KEY',
@@ -36,20 +39,9 @@ const PLACEHOLDER_VALUES: Partial<Record<ConfigKey, string[]>> = {
   GEMINI_API_KEY: ['your-gemini-api-key', 'your-key'],
 };
 
-export interface ParsedCliArgs {
-  values: Partial<Record<ConfigKey, string>>;
-  helpRequested: boolean;
-  warnings: string[];
-}
-
-export interface ResolvedConfig {
-  values: Partial<Record<ConfigKey, string>>;
-  helpRequested: boolean;
-  warnings: string[];
-}
-
 export interface ServerRuntimeConfig {
-  defaultModel: string;
+  provider: ProviderType;
+  model: string;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   geminiApiKey?: string;
@@ -66,21 +58,17 @@ export function loadDotEnv(): void {
   loadDotEnvFile({ quiet: true });
 }
 
-export function parseCliArgs(argv: string[] = process.argv.slice(2)): ParsedCliArgs {
+function parseCliArgs(argv: string[]): { values: Partial<Record<ConfigKey, string>>; helpRequested: boolean; warnings: string[] } {
   const values: Partial<Record<ConfigKey, string>> = {};
   const warnings: string[] = [];
   let helpRequested = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (!arg.startsWith('--')) {
-      continue;
-    }
+    if (!arg.startsWith('--')) continue;
 
     const raw = arg.slice(2);
-    if (!raw) {
-      continue;
-    }
+    if (!raw) continue;
 
     if (raw === 'help') {
       helpRequested = true;
@@ -120,109 +108,14 @@ export function parseCliArgs(argv: string[] = process.argv.slice(2)): ParsedCliA
   return { values, helpRequested, warnings };
 }
 
-export function resolveConfig(
-  argv: string[] = process.argv.slice(2),
-  env: NodeJS.ProcessEnv = process.env,
-): ResolvedConfig {
-  const parsed = parseCliArgs(argv);
-  const warnings = [...parsed.warnings];
-  const values: Partial<Record<ConfigKey, string>> = {};
-
-  const configKeys = new Set<ConfigKey>([
-    ...Object.values(CLI_FLAG_TO_CONFIG_KEY),
-  ]);
-
-  for (const key of configKeys) {
-    const rawValue = parsed.values[key] ?? env[key];
-    const normalizedValue = normalizeConfigValue(key, rawValue, warnings);
-    if (normalizedValue !== undefined) {
-      values[key] = normalizedValue;
-    }
-  }
-
-  return {
-    values,
-    helpRequested: parsed.helpRequested,
-    warnings,
-  };
-}
-
-export function getServerRuntimeConfig(
-  argv: string[] = process.argv.slice(2),
-  env: NodeJS.ProcessEnv = process.env,
-): ServerRuntimeConfig {
-  const resolved = resolveConfig(argv, env);
-  const warnings = [...resolved.warnings];
-
-  const transportCandidate = resolved.values.MCP_TRANSPORT ?? 'stdio';
-  const transportMode = isTransportMode(transportCandidate)
-    ? transportCandidate
-    : withWarning(warnings, `Invalid MCP_TRANSPORT '${transportCandidate}', falling back to 'stdio'`, 'stdio');
-
-  const portCandidate = resolved.values.MCP_PORT ?? '3000';
-  const parsedPort = Number.parseInt(portCandidate, 10);
-  const port = Number.isInteger(parsedPort) && parsedPort > 0
-    ? parsedPort
-    : withWarning(warnings, `Invalid MCP_PORT '${portCandidate}', falling back to 3000`, 3000);
-
-  return {
-    defaultModel: resolved.values.DEFAULT_MODEL ?? 'gemini-2.5-flash-image',
-    openaiApiKey: resolved.values.OPENAI_API_KEY,
-    openaiBaseUrl: resolved.values.OPENAI_BASE_URL,
-    geminiApiKey: resolved.values.GEMINI_API_KEY,
-    geminiBaseUrl: resolved.values.GEMINI_BASE_URL,
-    transportMode,
-    stdioLogsEnabled: parseBooleanConfig(resolved.values.MCP_STDIO_LOGS),
-    host: resolved.values.MCP_HOST ?? 'localhost',
-    port,
-    helpRequested: resolved.helpRequested,
-    warnings,
-  };
-}
-
-export function getCliHelpText(): string {
-  return [
-    'Assets Generation MCP Server',
-    '',
-    'Supported CLI options (CLI > environment > defaults):',
-    '  --openai-api-key <value>',
-    '  --openai-base-url <value>',
-    '  --gemini-api-key <value>',
-    '  --gemini-base-url <value>',
-    '  --default-model <value>',
-    '  --mcp-transport <stdio|sse|http>',
-    '  --mcp-stdio-logs          Enable startup/runtime logs in stdio mode (default: off)',
-    '  --mcp-host <value>',
-    '  --mcp-port <number>',
-    '  --openai-image-model <value>',
-    '  --openai-image-prompt <value>',
-    '  --help',
-    '',
-    'Examples:',
-    '  node dist/index.js --openai-api-key sk-... --openai-base-url https://example.com/v1 --default-model gpt-image-2',
-    '  npx -y @ayaka209/assets-gen-mcp --openai-api-key sk-... --openai-base-url https://example.com/v1',
-  ].join('\n');
-}
-
-function normalizeConfigValue(
-  key: ConfigKey,
-  value: string | undefined,
-  warnings: string[],
-): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
+function normalizeConfigValue(key: ConfigKey, value: string | undefined, warnings: string[]): string | undefined {
+  if (value === undefined) return undefined;
   const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
+  if (!trimmed) return undefined;
   if (PLACEHOLDER_VALUES[key]?.includes(trimmed)) {
     warnings.push(`${key} uses a placeholder value and will be ignored`);
     return undefined;
   }
-
   return trimmed;
 }
 
@@ -235,7 +128,99 @@ function isTransportMode(value: string): value is TransportMode {
   return value === 'stdio' || value === 'sse' || value === 'http';
 }
 
+function isProviderType(value: string): value is ProviderType {
+  return value === 'openai' || value === 'gemini';
+}
+
 function withWarning<T>(warnings: string[], warning: string, fallback: T): T {
   warnings.push(warning);
   return fallback;
+}
+
+export function getServerRuntimeConfig(
+  argv: string[] = process.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
+): ServerRuntimeConfig {
+  const parsed = parseCliArgs(argv);
+  const warnings = [...parsed.warnings];
+  const values: Partial<Record<ConfigKey, string>> = {};
+
+  for (const key of Object.values(CLI_FLAG_TO_CONFIG_KEY)) {
+    const rawValue = parsed.values[key] ?? env[key];
+    const normalizedValue = normalizeConfigValue(key, rawValue, warnings);
+    if (normalizedValue !== undefined) {
+      values[key] = normalizedValue;
+    }
+  }
+
+  // Provider: explicit from config
+  const providerRaw = values.IMAGEGEN_PROVIDER ?? 'openai';
+  const provider: ProviderType = isProviderType(providerRaw)
+    ? providerRaw
+    : withWarning(warnings, `Invalid IMAGEGEN_PROVIDER '${providerRaw}', falling back to 'openai'`, 'openai' as ProviderType);
+
+  // Model: from config
+  const model = values.IMAGEGEN_MODEL ?? 'gpt-image-1';
+
+  const transportCandidate = values.MCP_TRANSPORT ?? 'stdio';
+  const transportMode = isTransportMode(transportCandidate)
+    ? transportCandidate
+    : withWarning(warnings, `Invalid MCP_TRANSPORT '${transportCandidate}', falling back to 'stdio'`, 'stdio');
+
+  const portCandidate = values.MCP_PORT ?? '3000';
+  const parsedPort = Number.parseInt(portCandidate, 10);
+  const port = Number.isInteger(parsedPort) && parsedPort > 0
+    ? parsedPort
+    : withWarning(warnings, `Invalid MCP_PORT '${portCandidate}', falling back to 3000`, 3000);
+
+  return {
+    provider,
+    model,
+    openaiApiKey: values.OPENAI_API_KEY,
+    openaiBaseUrl: values.OPENAI_BASE_URL,
+    geminiApiKey: values.GEMINI_API_KEY,
+    geminiBaseUrl: values.GEMINI_BASE_URL,
+    transportMode,
+    stdioLogsEnabled: parseBooleanConfig(values.MCP_STDIO_LOGS),
+    host: values.MCP_HOST ?? 'localhost',
+    port,
+    helpRequested: parsed.helpRequested,
+    warnings,
+  };
+}
+
+export function getCliHelpText(): string {
+  return [
+    'ImageGen MCP Server',
+    '',
+    'Environment variables / CLI options (CLI > environment > defaults):',
+    '  IMAGEGEN_PROVIDER    Provider: openai | gemini (default: openai)',
+    '  IMAGEGEN_MODEL       Model name (default: gpt-image-1)',
+    '  OPENAI_API_KEY       OpenAI API key',
+    '  OPENAI_BASE_URL      OpenAI API base URL (proxy)',
+    '  GEMINI_API_KEY       Gemini API key',
+    '  GEMINI_BASE_URL      Gemini API base URL (proxy)',
+    '  MCP_TRANSPORT        stdio | sse | http (default: stdio)',
+    '  MCP_STDIO_LOGS       Enable logs on stderr in stdio mode',
+    '  MCP_HOST             SSE/HTTP bind host (default: localhost)',
+    '  MCP_PORT             SSE/HTTP bind port (default: 3000)',
+    '',
+    'CLI flags:',
+    '  --provider <openai|gemini>',
+    '  --model <model-name>',
+    '  --openai-api-key <value>',
+    '  --openai-base-url <value>',
+    '  --gemini-api-key <value>',
+    '  --gemini-base-url <value>',
+    '  --mcp-transport <stdio|sse|http>',
+    '  --mcp-stdio-logs',
+    '  --mcp-host <value>',
+    '  --mcp-port <number>',
+    '  --help',
+    '',
+    'Examples:',
+    '  npx -y imagegen-mcp-server --provider openai --model gpt-image-1',
+    '  npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image',
+    '  IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image npx -y imagegen-mcp-server',
+  ].join('\n');
 }

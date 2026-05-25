@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   GENERATE_IMAGE_TOOL,
+  EDIT_IMAGE_TOOL,
   TOOLS,
   getToolByName,
   isValidToolName,
@@ -28,20 +29,19 @@ describe('GENERATE_IMAGE_TOOL', () => {
     expect(schema.properties.prompt.type).toBe('string');
   });
 
-  it('should define model property with enum', () => {
+  it('should NOT have model property (model is from env)', () => {
     const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
-    expect(schema.properties.model).toBeDefined();
-    expect(schema.properties.model.description).toContain('gpt-image-2');
-    expect(schema.properties.model.description).toContain('doubao-seedream');
-    expect(schema.properties.model.examples).toContain('dall-e-2');
-    expect(schema.properties.model.examples).toContain('gemini-3-pro-image-preview');
+    expect(schema.properties.model).toBeUndefined();
+  });
+
+  it('should NOT have response_format property (always base64)', () => {
+    const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
+    expect(schema.properties.response_format).toBeUndefined();
   });
 
   it('should define size property', () => {
     const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
     expect(schema.properties.size).toBeDefined();
-    expect(schema.properties.size.description).toContain('1024x1024');
-    expect(schema.properties.size.description).toContain('1536x1024');
   });
 
   it('should define quality property', () => {
@@ -51,12 +51,11 @@ describe('GENERATE_IMAGE_TOOL', () => {
     expect(schema.properties.quality.enum).toContain('hd');
   });
 
-  it('should define response_format property', () => {
+  it('should define aspect_ratio property', () => {
     const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
-    expect(schema.properties.response_format).toBeDefined();
-    expect(schema.properties.response_format.enum).toContain('url');
-    expect(schema.properties.response_format.enum).toContain('base64');
-    expect(schema.properties.response_format.enum).toContain('auto');
+    expect(schema.properties.aspect_ratio).toBeDefined();
+    expect(schema.properties.aspect_ratio.enum).toContain('1:1');
+    expect(schema.properties.aspect_ratio.enum).toContain('16:9');
   });
 
   it('should define timeout property with default 120', () => {
@@ -67,21 +66,60 @@ describe('GENERATE_IMAGE_TOOL', () => {
   });
 });
 
-describe('TOOLS', () => {
-  it('should contain generate_image tool', () => {
-    expect(TOOLS).toContainEqual(GENERATE_IMAGE_TOOL);
+describe('EDIT_IMAGE_TOOL', () => {
+  it('should have correct name', () => {
+    expect(EDIT_IMAGE_TOOL.name).toBe('edit_image');
   });
 
-  it('should have at least one tool', () => {
-    expect(TOOLS.length).toBeGreaterThanOrEqual(1);
+  it('should have description', () => {
+    expect(EDIT_IMAGE_TOOL.description).toBeTruthy();
+    expect(EDIT_IMAGE_TOOL.description).toContain('edit');
+  });
+
+  it('should require image and prompt', () => {
+    const schema = EDIT_IMAGE_TOOL.inputSchema as any;
+    expect(schema.required).toContain('image');
+    expect(schema.required).toContain('prompt');
+  });
+
+  it('should define image property', () => {
+    const schema = EDIT_IMAGE_TOOL.inputSchema as any;
+    expect(schema.properties.image).toBeDefined();
+    expect(schema.properties.image.type).toBe('string');
+  });
+
+  it('should define mask property (optional)', () => {
+    const schema = EDIT_IMAGE_TOOL.inputSchema as any;
+    expect(schema.properties.mask).toBeDefined();
+    expect(schema.properties.mask.type).toBe('string');
+  });
+
+  it('should NOT have model property', () => {
+    const schema = EDIT_IMAGE_TOOL.inputSchema as any;
+    expect(schema.properties.model).toBeUndefined();
+  });
+
+  it('should NOT have response_format property', () => {
+    const schema = EDIT_IMAGE_TOOL.inputSchema as any;
+    expect(schema.properties.response_format).toBeUndefined();
+  });
+});
+
+describe('TOOLS', () => {
+  it('should contain both tools', () => {
+    expect(TOOLS).toContainEqual(GENERATE_IMAGE_TOOL);
+    expect(TOOLS).toContainEqual(EDIT_IMAGE_TOOL);
+  });
+
+  it('should have exactly 2 tools', () => {
+    expect(TOOLS.length).toBe(2);
   });
 });
 
 describe('getToolByName', () => {
-  it('should return tool for valid name', () => {
-    const tool = getToolByName('generate_image');
-    expect(tool).toBeDefined();
-    expect(tool?.name).toBe('generate_image');
+  it('should return tool for valid names', () => {
+    expect(getToolByName('generate_image')?.name).toBe('generate_image');
+    expect(getToolByName('edit_image')?.name).toBe('edit_image');
   });
 
   it('should return undefined for invalid name', () => {
@@ -93,6 +131,7 @@ describe('getToolByName', () => {
 describe('isValidToolName', () => {
   it('should return true for valid tool names', () => {
     expect(isValidToolName('generate_image')).toBe(true);
+    expect(isValidToolName('edit_image')).toBe(true);
   });
 
   it('should return false for invalid tool names', () => {

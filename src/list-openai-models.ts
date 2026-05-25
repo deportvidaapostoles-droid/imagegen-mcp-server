@@ -3,34 +3,37 @@
  * List available OpenAI models from API
  */
 import OpenAI from 'openai';
-import { loadDotEnv, resolveConfig } from './config.js';
+import { loadDotEnv, getServerRuntimeConfig } from './config.js';
 
 loadDotEnv();
-const runtimeConfig = resolveConfig();
-runtimeConfig.warnings.forEach((warning) => console.warn(`Config warning: ${warning}`));
+const config = getServerRuntimeConfig();
+config.warnings.forEach((warning) => console.warn(`Config warning: ${warning}`));
 
-const apiKey = runtimeConfig.values.OPENAI_API_KEY;
+if (config.provider !== 'openai') {
+  console.error('Error: This command requires IMAGEGEN_PROVIDER=openai');
+  process.exit(1);
+}
 
+const apiKey = config.openaiApiKey;
 if (!apiKey) {
-  console.error('Error: OPENAI_API_KEY not set via CLI, environment, or .env file');
+  console.error('Error: OPENAI_API_KEY not set');
   process.exit(1);
 }
 
 async function listModels() {
   const client = new OpenAI({
     apiKey,
-    baseURL: runtimeConfig.values.OPENAI_BASE_URL || undefined,
+    baseURL: config.openaiBaseUrl || undefined,
   });
-  
+
   try {
     const models = await client.models.list();
-    
+
     console.log('Available OpenAI Models:\n');
     console.log('='.repeat(80));
-    
-    // Filter for image-related models
+
     const imageModels = [];
-    
+
     for await (const model of models) {
       if (
         model.id.includes('dall-e')
@@ -41,14 +44,13 @@ async function listModels() {
         imageModels.push(model);
       }
     }
-    
+
     console.log('\nImage Generation Models:');
     for (const model of imageModels) {
       console.log(`  - ${model.id}`);
     }
-    
+
     console.log('\n' + '='.repeat(80));
-    
   } catch (error) {
     console.error('Failed to fetch models:', error);
     process.exit(1);

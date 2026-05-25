@@ -1,35 +1,26 @@
 /**
- * Provider detection and validation logic for image generation
+ * Provider validation logic for image generation
  */
 
 import {
   isOpenAIModel,
   isGeminiModel,
-  isSupportedModel,
   GPT_IMAGE_SIZES,
   DALLE3_SIZES,
   DALLE2_SIZES,
-  type OpenAIModel,
   type ImageQuality,
   type GPTImageSize,
   type DallE3Size,
   type DallE2Size,
 } from './validators.js';
 
-export interface OpenAIValidationResult {
-  valid: true;
-  model: OpenAIModel;
-  size: DallE3Size | DallE2Size;
-  quality: ImageQuality;
-  n: number;
-}
+// Re-export for use in index.ts
+export { isOpenAIModel, isGeminiModel } from './validators.js';
 
 export interface ValidationError {
   valid: false;
   error: string;
 }
-
-export type ValidationResult = OpenAIValidationResult | ValidationError;
 
 /**
  * Validate OpenAI-compatible vendor image parameters
@@ -122,42 +113,4 @@ export function validateGeminiParams(n: number): ValidationError | null {
     };
   }
   return null;
-}
-
-/**
- * Detect provider from model name
- */
-export function detectProvider(model: string): 'openai' | 'gemini' | null {
-  if (isOpenAIModel(model)) return 'openai';
-  if (isGeminiModel(model)) return 'gemini';
-  return null;
-}
-
-/**
- * Get error message for unsupported model
- */
-export function getUnsupportedModelError(model: string): string {
-  return `Unknown model: ${model}. Supported models: gpt-image-1, gpt-image-2, dall-e-2, dall-e-3, doubao-*, volcengine/doubao-*, gemini-3-pro-image-preview, gemini-2.5-flash-image, gemini-2.0-flash-exp-image-generation, imagen-4.0-generate-001, imagen-4.0-ultra-generate-001, imagen-4.0-fast-generate-001`;
-}
-
-/**
- * Validate model and return provider info
- */
-export function validateModel(model: string): { provider: 'openai' | 'gemini' } | ValidationError {
-  if (!isSupportedModel(model)) {
-    return {
-      valid: false,
-      error: getUnsupportedModelError(model),
-    };
-  }
-  
-  const provider = detectProvider(model);
-  if (!provider) {
-    return {
-      valid: false,
-      error: getUnsupportedModelError(model),
-    };
-  }
-  
-  return { provider };
 }

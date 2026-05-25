@@ -3,7 +3,6 @@
  */
 
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { SUPPORTED_MODELS } from "./validators.js";
 
 /**
  * Generate image tool definition
@@ -11,11 +10,9 @@ import { SUPPORTED_MODELS } from "./validators.js";
 export const GENERATE_IMAGE_TOOL: Tool = {
   name: "generate_image",
   description:
-    "Generate an image from a text prompt using OpenAI-compatible or Google Gemini image models. " +
-    "The provider is chosen automatically from the model name: " +
-    "gpt-image-* / dall-e-* / doubao-* models use the OpenAI-compatible path (requires OPENAI_API_KEY); " +
-    "gemini-* / imagen-* models use the Gemini path (requires GEMINI_API_KEY). " +
-    "Returns one or more MCP ImageContent blocks (base64 PNG/JPEG). " +
+    "Generate an image from a text prompt. " +
+    "The provider (OpenAI or Gemini) and model are configured via environment variables IMAGEGEN_PROVIDER and IMAGEGEN_MODEL. " +
+    "Returns MCP ImageContent blocks (base64 PNG/JPEG). " +
     "Image generation can be slow — the default timeout is 120 s; increase it with the `timeout` parameter if the provider is known to be slow.",
   inputSchema: {
     type: "object",
@@ -26,17 +23,6 @@ export const GENERATE_IMAGE_TOOL: Tool = {
           "Detailed text description of the image to generate. " +
           "More specific prompts produce better results. " +
           "Example: 'A photorealistic red apple on a white marble table, soft studio lighting, 4K'.",
-      },
-      model: {
-        type: "string",
-        description:
-          "Model to use for image generation. " +
-          "OpenAI-compatible: 'gpt-image-2' (recommended, best quality), 'gpt-image-1', 'dall-e-3', 'dall-e-2', " +
-          "'doubao-seedream-4-0-250828', 'volcengine/doubao-seedream-5-0-260128', and any future 'doubao-*' or 'volcengine/doubao-*' models. " +
-          "Gemini: 'gemini-2.5-flash-image' (fast), 'gemini-3-pro-image-preview' (high quality), " +
-          "'gemini-2.0-flash-exp-image-generation', 'imagen-4.0-generate-001', 'imagen-4.0-ultra-generate-001', 'imagen-4.0-fast-generate-001'. " +
-          "Omit to use the server default model (configured via DEFAULT_MODEL).",
-        examples: [...SUPPORTED_MODELS],
       },
       size: {
         type: "string",
@@ -72,16 +58,6 @@ export const GENERATE_IMAGE_TOOL: Tool = {
           "Options: '1:1' (square, default), '3:4' (portrait), '4:3' (landscape), '9:16' (tall), '16:9' (wide).",
         enum: ["1:1", "3:4", "4:3", "9:16", "16:9"],
       },
-      response_format: {
-        type: "string",
-        description:
-          "How images are returned in the MCP response. " +
-          "'base64': inline base64-encoded image data (works offline, larger payload). " +
-          "'url': public URL valid for ~60 minutes (OpenAI only; not supported by all proxies). " +
-          "'auto' (default): saves the image to a temporary local file and returns both the file path and the inline base64 image data. This mode is the most compatible and ensures the image is always accessible regardless of provider defaults.",
-        enum: ["url", "base64", "auto"],
-        default: "auto",
-      },
       timeout: {
         type: "number",
         description:
@@ -96,9 +72,84 @@ export const GENERATE_IMAGE_TOOL: Tool = {
 };
 
 /**
+ * Edit image tool definition
+ */
+export const EDIT_IMAGE_TOOL: Tool = {
+  name: "edit_image",
+  description:
+    "Edit an existing image using a text prompt. " +
+    "The provider (OpenAI or Gemini) and model are configured via environment variables IMAGEGEN_PROVIDER and IMAGEGEN_MODEL. " +
+    "For OpenAI: supports inpainting/outpainting via an optional mask image. The image can be an absolute file path or base64-encoded string. " +
+    "For Gemini: provide the original image as base64 or file path and describe the desired edit in the prompt. " +
+    "Returns MCP ImageContent blocks (base64 PNG/JPEG).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      image: {
+        type: "string",
+        description:
+          "The image to edit. Can be an absolute file path (e.g., /path/to/image.png) or a base64-encoded image string (optionally as a data URL like data:image/png;base64,...). " +
+          "Supported formats: PNG, JPEG, WebP. Max size: 25MB for OpenAI.",
+      },
+      prompt: {
+        type: "string",
+        description:
+          "A text description of the desired edit. Max 32000 characters. " +
+          "Examples: 'Add a rainbow in the sky', 'Remove the person from the image', 'Change the background to a beach', 'Make the cat wear a hat'.",
+      },
+      mask: {
+        type: "string",
+        description:
+          "Optional mask image for inpainting — only used with OpenAI gpt-image-* models. " +
+          "Can be an absolute file path or base64-encoded string. " +
+          "Must be a PNG image with the same dimensions as the input image. " +
+          "Fully transparent areas indicate where the edit should be applied. " +
+          "Max size: 4MB.",
+      },
+      size: {
+        type: "string",
+        description:
+          "Output image dimensions — only applies to OpenAI-compatible models. " +
+          "gpt-image-*: 'auto' (default), '1024x1024', '1536x1024' (landscape), '1024x1536' (portrait). " +
+          "For Gemini models, use aspect_ratio instead.",
+      },
+      quality: {
+        type: "string",
+        description:
+          "Image quality level — only applies to OpenAI gpt-image-* models. " +
+          "Options: 'high' (best, slowest), 'medium', 'low', 'standard' (default). " +
+          "Ignored for Gemini models.",
+        enum: ["standard", "hd", "high", "medium", "low"],
+      },
+      n: {
+        type: "number",
+        description:
+          "Number of images to generate. OpenAI gpt-image-*: 1–10. Gemini: must be 1. " +
+          "Defaults to 1.",
+      },
+      aspect_ratio: {
+        type: "string",
+        description:
+          "Aspect ratio of the output image — only applies to Gemini models. " +
+          "Options: '1:1' (square, default), '3:4' (portrait), '4:3' (landscape), '9:16' (tall), '16:9' (wide).",
+        enum: ["1:1", "3:4", "4:3", "9:16", "16:9"],
+      },
+      timeout: {
+        type: "number",
+        description:
+          "Maximum time in seconds to wait for the API to respond. " +
+          "Defaults to 120 s. Increase this (e.g. 180–300) if using a slow proxy or high-quality model.",
+        default: 120,
+      },
+    },
+    required: ["image", "prompt"],
+  },
+};
+
+/**
  * All available tools
  */
-export const TOOLS: Tool[] = [GENERATE_IMAGE_TOOL];
+export const TOOLS: Tool[] = [GENERATE_IMAGE_TOOL, EDIT_IMAGE_TOOL];
 
 /**
  * Get tool by name

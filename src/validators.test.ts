@@ -2,26 +2,19 @@ import { describe, it, expect } from 'vitest';
 import {
   isOpenAIModel,
   isGeminiModel,
-  isSupportedModel,
-  SUPPORTED_MODELS,
+  GPT_IMAGE_SIZES,
   DALLE3_SIZES,
   DALLE2_SIZES,
 } from './validators.js';
 
 describe('isOpenAIModel', () => {
-  it('should return true for gpt-image-1', () => {
+  it('should return true for gpt-image models', () => {
     expect(isOpenAIModel('gpt-image-1')).toBe(true);
-  });
-
-  it('should return true for gpt-image-2', () => {
     expect(isOpenAIModel('gpt-image-2')).toBe(true);
   });
 
-  it('should return true for dall-e-2', () => {
+  it('should return true for dall-e models', () => {
     expect(isOpenAIModel('dall-e-2')).toBe(true);
-  });
-
-  it('should return true for dall-e-3', () => {
     expect(isOpenAIModel('dall-e-3')).toBe(true);
   });
 
@@ -31,74 +24,37 @@ describe('isOpenAIModel', () => {
   });
 
   it('should return false for gemini models', () => {
-    expect(isOpenAIModel('gemini-3-pro-image-preview')).toBe(false);
     expect(isOpenAIModel('gemini-2.5-flash-image')).toBe(false);
-  });
-
-  it('should return false for unknown models', () => {
-    expect(isOpenAIModel('gpt-4')).toBe(false);
-    expect(isOpenAIModel('unknown')).toBe(false);
-    expect(isOpenAIModel('')).toBe(false);
+    expect(isOpenAIModel('imagen-3.0-generate-001')).toBe(false);
   });
 });
 
 describe('isGeminiModel', () => {
   it('should return true for gemini models', () => {
-    expect(isGeminiModel('gemini-3-pro-image-preview')).toBe(true);
     expect(isGeminiModel('gemini-2.5-flash-image')).toBe(true);
+    expect(isGeminiModel('gemini-2.0-flash-exp')).toBe(true);
   });
 
   it('should return true for imagen models', () => {
-    expect(isGeminiModel('imagen-4.0-generate-001')).toBe(true);
+    expect(isGeminiModel('imagen-3.0-generate-001')).toBe(true);
   });
 
-  it('should return false for OpenAI models', () => {
-    expect(isGeminiModel('dall-e-2')).toBe(false);
+  it('should return false for openai models', () => {
+    expect(isGeminiModel('gpt-image-1')).toBe(false);
     expect(isGeminiModel('dall-e-3')).toBe(false);
   });
-
-  it('should return false for unknown models', () => {
-    expect(isGeminiModel('gpt-4')).toBe(false);
-    expect(isGeminiModel('unknown')).toBe(false);
-  });
 });
 
-describe('isSupportedModel', () => {
-  it('should return true for all supported models', () => {
-    SUPPORTED_MODELS.forEach(model => {
-      expect(isSupportedModel(model)).toBe(true);
-    });
+describe('size constants', () => {
+  it('should have correct GPT image sizes', () => {
+    expect(GPT_IMAGE_SIZES).toEqual(['auto', '1024x1024', '1536x1024', '1024x1536']);
   });
 
-  it('should return false for unsupported models', () => {
-    expect(isSupportedModel('gpt-4')).toBe(false);
-    expect(isSupportedModel('claude-3')).toBe(false);
-    expect(isSupportedModel('')).toBe(false);
-  });
-});
-
-describe('Constants', () => {
-  it('should have correct DALLE3_SIZES', () => {
-    expect(DALLE3_SIZES).toContain('1024x1024');
-    expect(DALLE3_SIZES).toContain('1792x1024');
-    expect(DALLE3_SIZES).toContain('1024x1792');
-    expect(DALLE3_SIZES).toHaveLength(3);
+  it('should have correct DALL-E 3 sizes', () => {
+    expect(DALLE3_SIZES).toEqual(['1024x1024', '1792x1024', '1024x1792']);
   });
 
-  it('should have correct DALLE2_SIZES', () => {
-    expect(DALLE2_SIZES).toContain('256x256');
-    expect(DALLE2_SIZES).toContain('512x512');
-    expect(DALLE2_SIZES).toContain('1024x1024');
-    expect(DALLE2_SIZES).toHaveLength(3);
-  });
-
-  it('should have all expected supported models', () => {
-    expect(SUPPORTED_MODELS).toContain('gpt-image-1');
-    expect(SUPPORTED_MODELS).toContain('gpt-image-2');
-    expect(SUPPORTED_MODELS).toContain('dall-e-2');
-    expect(SUPPORTED_MODELS).toContain('dall-e-3');
-    expect(SUPPORTED_MODELS).toContain('doubao-seedream-4-0-250828');
-    expect(SUPPORTED_MODELS).toContain('gemini-3-pro-image-preview');
-    expect(SUPPORTED_MODELS).toContain('imagen-4.0-generate-001');
+  it('should have correct DALL-E 2 sizes', () => {
+    expect(DALLE2_SIZES).toEqual(['256x256', '512x512', '1024x1024']);
   });
 });

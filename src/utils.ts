@@ -1,52 +1,9 @@
 /**
- * Utility functions for the assets-gen-mcp server
+ * Utility functions for the imagegen-mcp server
  */
-
-import { writeFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { randomBytes } from "crypto";
-
-/**
- * Map MIME type to file extension for common image formats.
- */
-function mimeToExtension(mimeType: string): string {
-  const map: Record<string, string> = {
-    "image/png": ".png",
-    "image/jpeg": ".jpg",
-    "image/webp": ".webp",
-    "image/gif": ".gif",
-    "image/bmp": ".bmp",
-    "image/tiff": ".tiff",
-  };
-  return map[mimeType] || ".png";
-}
-
-/**
- * Save base64-encoded image data to a temporary file with a
- * cryptographically random filename. Returns the absolute file path.
- *
- * Security: uses `wx` (exclusive-create) flag to prevent overwrite attacks
- * and `mode: 0o600` for owner-only read/write permissions. Combined with
- * `crypto.randomBytes(16)` filenames, path-traversal and collision attacks
- * are infeasible.
- */
-export async function saveBase64ToTempFile(
-  data: string,
-  mimeType: string,
-): Promise<string> {
-  const ext = mimeToExtension(mimeType);
-  const filename = `${randomBytes(16).toString("hex")}${ext}`;
-  const filePath = join(tmpdir(), filename);
-  const buffer = Buffer.from(data, "base64");
-  await writeFile(filePath, buffer, { flag: "wx", mode: 0o600 });
-  return filePath;
-}
 
 /**
  * Convert an image URL to base64 encoded data
- * @param url - The URL of the image to convert
- * @returns Object containing base64 data and mime type
  */
 export async function urlToBase64(url: string): Promise<{ data: string; mimeType: string }> {
   try {
@@ -54,18 +11,13 @@ export async function urlToBase64(url: string): Promise<{ data: string; mimeType
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.statusText}`);
     }
-    
+
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64 = buffer.toString('base64');
-    
-    // Try to determine mime type from response headers
     const contentType = response.headers.get('content-type') || 'image/png';
-    
-    return {
-      data: base64,
-      mimeType: contentType,
-    };
+
+    return { data: base64, mimeType: contentType };
   } catch (error) {
     throw new Error(`Failed to convert URL to base64: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -73,48 +25,63 @@ export async function urlToBase64(url: string): Promise<{ data: string; mimeType
 
 /**
  * Normalize OpenAI-compatible image responses into base64 image data.
+ * Always returns base64 data — URLs are fetched and converted.
  */
 export async function openAIImageToBase64(image: {
   b64_json?: string;
   url?: string;
 }): Promise<{ data: string; mimeType: string } | null> {
   if (image.b64_json) {
-    return {
-      data: image.b64_json,
-      mimeType: 'image/png',
-    };
+    return { data: image.b64_json, mimeType: 'image/png' };
   }
-
   if (image.url) {
     return urlToBase64(image.url);
   }
-
   return null;
 }
 
 /**
- * Format an error message from an unknown error type
- * @param error - The error to format
- * @returns Formatted error message string
+ * Parse an image input that can be:
+ * - A file path (absolute path starting with /)
+ * - A data URL (data:image/xxx;base64,...)
+ * - A raw base64 string
+ * Returns { data: base64, mimeType: string }
  */
-export function formatErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+export async function parseImageInput(input: string): Promise<{ data: string; mimeType: string }> {
+  // Data URL
+  if (input.startsWith('data:image/')) {
+    const match = input.match(/^data:(image\/\w+);base64,(.*)$/);
+    if (match) {
+      return { data: match[2], mimeType: match[1] };
+    }
+    throw new Error('Invalid data URL format');
+  }
+
+  // File path
+  if (input.startsWith('/')) {
+    const fs = await import('fs/promises');
+    const { extname } = await import('path');
+    const ext = extname(input).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+    };
+    const mimeType = mimeMap[ext] || 'image/png';
+    const buffer = await fs.readFile(input);
+    return { data: buffer.toString('base64'), mimeType };
+  }
+
+  // Raw base64
+  return { data: input, mimeType: 'image/png' };
 }
 
 /**
- * Create a success response object
+ * Format an error message from an unknown error type
  */
-export function createSuccessResponse(data: Record<string, unknown>): {
-  content: Array<{ type: string; text: string }>;
-} {
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(data, null, 2),
-      },
-    ],
-  };
+export function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -128,14 +95,7 @@ export function createErrorResponse(errorMessage: string): {
     content: [
       {
         type: "text",
-        text: JSON.stringify(
-          {
-            success: false,
-            error: errorMessage,
-          },
-          null,
-          2
-        ),
+        text: JSON.stringify({ success: false, error: errorMessage }, null, 2),
       },
     ],
     isError: true,
