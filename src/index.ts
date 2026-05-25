@@ -358,7 +358,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         quality,
         n,
         aspect_ratio,
-        timeout: timeoutSeconds = 120,
+        timeout: timeoutSeconds = 180,
       } = args as {
         prompt: string;
         size?: string;
@@ -392,7 +392,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         quality,
         n,
         aspect_ratio,
-        timeout: timeoutSeconds = 120,
+        timeout: timeoutSeconds = 180,
       } = args as {
         image: string;
         prompt: string;

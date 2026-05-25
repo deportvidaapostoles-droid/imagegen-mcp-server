@@ -12,7 +12,7 @@ export const GENERATE_IMAGE_TOOL: Tool = {
   description:
     "Generate an image from a text prompt. " +
     "Returns MCP ImageContent blocks (base64 PNG/JPEG). " +
-    "Image generation can be slow — the default timeout is 120 s; increase it with the `timeout` parameter if the provider is known to be slow.",
+    "Image generation can be slow — the default timeout is 180 s; increase it with the `timeout` parameter if the provider is known to be slow.",
   inputSchema: {
     type: "object",
     properties: {
@@ -61,9 +61,9 @@ export const GENERATE_IMAGE_TOOL: Tool = {
         type: "number",
         description:
           "Maximum time in seconds to wait for the image generation API to respond. " +
-          "Defaults to 120 s. Increase this (e.g. 180–300) if using a slow proxy or high-quality model. " +
+          "Defaults to 180 s. Increase this (e.g. 300–600) if using a slow proxy or high-quality model. " +
           "The tool returns an error if the provider does not respond within this limit.",
-        default: 120,
+        default: 180,
       },
     },
     required: ["prompt"],
@@ -135,8 +135,8 @@ export const EDIT_IMAGE_TOOL: Tool = {
         type: "number",
         description:
           "Maximum time in seconds to wait for the API to respond. " +
-          "Defaults to 120 s. Increase this (e.g. 180–300) if using a slow proxy or high-quality model.",
-        default: 120,
+          "Defaults to 180 s. Increase this (e.g. 300–600) if using a slow proxy or high-quality model.",
+        default: 180,
       },
     },
     required: ["image", "prompt"],
