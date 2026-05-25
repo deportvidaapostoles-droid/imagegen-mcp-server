@@ -6,6 +6,7 @@ export type ProviderType = 'openai' | 'gemini';
 export type ConfigKey =
   | 'IMAGEGEN_PROVIDER'
   | 'IMAGEGEN_MODEL'
+  | 'IMAGEGEN_TIMEOUT'
   | 'OPENAI_API_KEY'
   | 'OPENAI_BASE_URL'
   | 'GEMINI_API_KEY'
@@ -28,6 +29,7 @@ const CLI_FLAG_TO_CONFIG_KEY: Record<string, ConfigKey> = {
   'mcp-stdio-logs': 'MCP_STDIO_LOGS',
   'mcp-host': 'MCP_HOST',
   'mcp-port': 'MCP_PORT',
+  'timeout': 'IMAGEGEN_TIMEOUT',
   'openai-image-model': 'OPENAI_IMAGE_MODEL',
   'openai-image-prompt': 'OPENAI_IMAGE_PROMPT',
 };
@@ -42,6 +44,7 @@ const PLACEHOLDER_VALUES: Partial<Record<ConfigKey, string[]>> = {
 export interface ServerRuntimeConfig {
   provider: ProviderType;
   model: string;
+  timeout: number;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   geminiApiKey?: string;
@@ -137,6 +140,16 @@ function withWarning<T>(warnings: string[], warning: string, fallback: T): T {
   return fallback;
 }
 
+function parseTimeout(value: string | undefined, warnings: string[]): number {
+  if (value === undefined) return 300;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    warnings.push(`Invalid IMAGEGEN_TIMEOUT '${value}', falling back to 300`);
+    return 300;
+  }
+  return parsed;
+}
+
 export function getServerRuntimeConfig(
   argv: string[] = process.argv.slice(2),
   env: NodeJS.ProcessEnv = process.env,
@@ -176,6 +189,7 @@ export function getServerRuntimeConfig(
   return {
     provider,
     model,
+    timeout: parseTimeout(values.IMAGEGEN_TIMEOUT, warnings),
     openaiApiKey: values.OPENAI_API_KEY,
     openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
@@ -204,6 +218,7 @@ export function getCliHelpText(): string {
     '  MCP_STDIO_LOGS       Enable logs on stderr in stdio mode',
     '  MCP_HOST             SSE/HTTP bind host (default: localhost)',
     '  MCP_PORT             SSE/HTTP bind port (default: 3000)',
+    '  IMAGEGEN_TIMEOUT     Default tool timeout in seconds (default: 300)',
     '',
     'CLI flags:',
     '  --provider <openai|gemini>',

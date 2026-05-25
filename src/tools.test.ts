@@ -58,11 +58,12 @@ describe('GENERATE_IMAGE_TOOL', () => {
     expect(schema.properties.aspect_ratio.enum).toContain('16:9');
   });
 
-  it('should define timeout property with default 180', () => {
+  it('should define timeout property without hardcoded default', () => {
     const schema = GENERATE_IMAGE_TOOL.inputSchema as any;
     expect(schema.properties.timeout).toBeDefined();
     expect(schema.properties.timeout.type).toBe('number');
-    expect(schema.properties.timeout.default).toBe(180);
+    // timeout default comes from IMAGEGEN_TIMEOUT env var, not hardcoded in schema
+    expect(schema.properties.timeout.default).toBeUndefined();
   });
 });
 

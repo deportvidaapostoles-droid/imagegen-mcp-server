@@ -64,6 +64,7 @@ if (runtimeConfig.provider === 'gemini' && runtimeConfig.geminiApiKey) {
 
 const PROVIDER = runtimeConfig.provider;
 const MODEL = runtimeConfig.model;
+const DEFAULT_TIMEOUT = runtimeConfig.timeout;
 
 // Create server instance
 const server = new Server(
@@ -358,7 +359,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         quality,
         n,
         aspect_ratio,
-        timeout: timeoutSeconds = 180,
+        timeout: timeoutSeconds = DEFAULT_TIMEOUT,
       } = args as {
         prompt: string;
         size?: string;
@@ -392,7 +393,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         quality,
         n,
         aspect_ratio,
-        timeout: timeoutSeconds = 180,
+        timeout: timeoutSeconds = DEFAULT_TIMEOUT,
       } = args as {
         image: string;
         prompt: string;

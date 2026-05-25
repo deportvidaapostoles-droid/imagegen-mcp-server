@@ -38,6 +38,7 @@ npm run build
 |------|------|--------|------|
 | `IMAGEGEN_PROVIDER` | 是 | `openai` | Provider：`openai` 或 `gemini` |
 | `IMAGEGEN_MODEL` | 是 | `gpt-image-1` | 模型名 |
+| `IMAGEGEN_TIMEOUT` | 否 | `300` | 工具默认超时秒数 |
 | `OPENAI_API_KEY` | provider=openai 时必填 | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | 否 | - | OpenAI API 代理地址 |
 | `GEMINI_API_KEY` | provider=gemini 时必填 | - | Gemini API Key |
@@ -152,7 +153,7 @@ const editResult = await client.callTool({
 | `quality` | 否 | `standard` | 图片质量 |
 | `n` | 否 | `1` | 生成数量 |
 | `aspect_ratio` | 否 | `1:1` | 宽高比（仅 Gemini） |
-| `timeout` | 否 | `180` | 超时秒数 |
+| `timeout` | 否 | 环境变量 `IMAGEGEN_TIMEOUT` | 超时秒数 |
 
 ### `edit_image`
 
@@ -165,7 +166,7 @@ const editResult = await client.callTool({
 | `quality` | 否 | `standard` | 图片质量（仅 OpenAI） |
 | `n` | 否 | `1` | 生成数量 |
 | `aspect_ratio` | 否 | `1:1` | 宽高比（仅 Gemini） |
-| `timeout` | 否 | `180` | 超时秒数 |
+| `timeout` | 否 | 环境变量 `IMAGEGEN_TIMEOUT` | 超时秒数 |
 
 ## 支持的模型
 

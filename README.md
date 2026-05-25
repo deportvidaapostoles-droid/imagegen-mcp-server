@@ -38,6 +38,7 @@ npm run build
 |----------|----------|---------|-------------|
 | `IMAGEGEN_PROVIDER` | Yes | `openai` | Provider: `openai` or `gemini` |
 | `IMAGEGEN_MODEL` | Yes | `gpt-image-1` | Model name |
+| `IMAGEGEN_TIMEOUT` | No | `300` | Default tool timeout in seconds |
 | `OPENAI_API_KEY` | When provider=openai | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | No | - | OpenAI API proxy URL |
 | `GEMINI_API_KEY` | When provider=gemini | - | Gemini API Key |
@@ -152,7 +153,7 @@ const editResult = await client.callTool({
 | `quality` | No | `standard` | Image quality |
 | `n` | No | `1` | Number of images |
 | `aspect_ratio` | No | `1:1` | Aspect ratio (Gemini only) |
-| `timeout` | No | `180` | Timeout in seconds |
+| `timeout` | No | env `IMAGEGEN_TIMEOUT` | Timeout in seconds |
 
 ### `edit_image`
 
@@ -165,7 +166,7 @@ const editResult = await client.callTool({
 | `quality` | No | `standard` | Image quality (OpenAI only) |
 | `n` | No | `1` | Number of images |
 | `aspect_ratio` | No | `1:1` | Aspect ratio (Gemini only) |
-| `timeout` | No | `180` | Timeout in seconds |
+| `timeout` | No | env `IMAGEGEN_TIMEOUT` | Timeout in seconds |
 
 ## Supported Models
 

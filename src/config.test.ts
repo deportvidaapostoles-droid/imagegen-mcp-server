@@ -15,6 +15,7 @@ describe('getServerRuntimeConfig', () => {
     expect(config.stdioLogsEnabled).toBe(false);
     expect(config.host).toBe('localhost');
     expect(config.port).toBe(3000);
+    expect(config.timeout).toBe(300);
   });
 
   it('should read provider and model from env', () => {
