@@ -12,6 +12,13 @@ export type Provider = "openai" | "gemini";
  */
 export function createTools(provider: Provider, defaultTimeout: number): Tool[] {
   const providerLabel = provider === "openai" ? "OpenAI" : "Gemini";
+  const imageDesc =
+    "An image to edit. Can be an absolute file path (e.g., /path/to/image.png) or a base64-encoded image string (optionally as a data URL like data:image/png;base64,...). " +
+    "Supported formats: PNG, JPEG, WebP.";
+  const imagesNote =
+    provider === "openai"
+      ? " Only the first image is used for editing; additional images are ignored."
+      : " Multiple images are supported for multi-image editing.";
 
   // ── Shared properties ────────────────────────────────────────────────────
 
@@ -25,12 +32,16 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
     },
   };
 
-  const imageProp: Record<string, object> = {
-    image: {
-      type: "string",
+  const imagesProp: Record<string, object> = {
+    images: {
+      type: "array",
       description:
-        "The image to edit. Can be an absolute file path (e.g., /path/to/image.png) or a base64-encoded image string (optionally as a data URL like data:image/png;base64,...). " +
-        "Supported formats: PNG, JPEG, WebP.",
+        "One or more images to edit. Each item can be an absolute file path or a base64-encoded image string." +
+        imagesNote,
+      items: {
+        type: "string",
+        description: imageDesc,
+      },
     },
   };
 
@@ -133,7 +144,7 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
   // ── edit_image ──────────────────────────────────────────────────────────
 
   const editProperties: Record<string, object> = {
-    ...imageProp,
+    ...imagesProp,
     ...editPromptProp,
     ...(provider === "openai" ? maskProp : {}),
     ...(provider === "openai" ? openaiSizeProp : geminiAspectRatioProp),
@@ -145,8 +156,7 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
   const EDIT_IMAGE_TOOL: Tool = {
     name: "edit_image",
     description:
-      `Edit an existing image using ${providerLabel} and a text prompt. ` +
-      "The image can be an absolute file path or a base64-encoded string. " +
+      `Edit one or more images using ${providerLabel} and a text prompt. ` +
       (provider === "openai"
         ? "Optionally provide a mask image for inpainting (specify areas to edit). "
         : "") +
@@ -154,7 +164,7 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
     inputSchema: {
       type: "object",
       properties: editProperties,
-      required: ["image", "prompt"],
+      required: ["images", "prompt"],
     },
   };
 

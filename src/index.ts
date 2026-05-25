@@ -143,7 +143,7 @@ async function handleOpenAIGenerate(params: {
 
 // ─── OpenAI edit ────────────────────────────────────────────────────────────
 async function handleOpenAIEdit(params: {
-  image: string;
+  images: string[];
   prompt: string;
   mask?: string;
   size?: string;
@@ -157,8 +157,14 @@ async function handleOpenAIEdit(params: {
 
   const { toFile } = await import("openai");
 
+  // OpenAI images.edit only supports a single image; use the first one
+  const firstImage = params.images[0];
+  if (!firstImage) {
+    throw new Error("At least one image is required for editing.");
+  }
+
   const imageFile = await toFile(
-    Buffer.from((await parseImageInput(params.image)).data, "base64"),
+    Buffer.from((await parseImageInput(firstImage)).data, "base64"),
     "input.png",
     { type: "image/png" }
   );
@@ -273,7 +279,7 @@ async function handleGeminiGenerate(params: {
 
 // ─── Gemini edit ────────────────────────────────────────────────────────────
 async function handleGeminiEdit(params: {
-  image: string;
+  images: string[];
   prompt: string;
   aspect_ratio?: string;
   n?: number;
@@ -287,19 +293,16 @@ async function handleGeminiEdit(params: {
   const validation = validateGeminiParams(n);
   if (validation) throw new Error(validation.error);
 
-  // Parse image input to base64
-  const { data: imageData, mimeType } = await parseImageInput(params.image);
-
   const aspectRatio = params.aspect_ratio || "1:1";
 
-  // Build multimodal content: image + text prompt
+  // Parse all images
+  const imageInputs = await Promise.all(params.images.map(img => parseImageInput(img)));
+
+  // Build multimodal content: images + text prompt
   const contents: any[] = [
-    {
-      inlineData: {
-        mimeType,
-        data: imageData,
-      },
-    },
+    ...imageInputs.map(({ data, mimeType }) => ({
+      inlineData: { mimeType, data },
+    })),
     {
       text: params.prompt + (aspectRatio !== "1:1" ? ` (aspect ratio: ${aspectRatio})` : ""),
     },
@@ -388,7 +391,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (name === "edit_image") {
       const {
-        image,
+        images,
         prompt,
         mask,
         size,
@@ -397,7 +400,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         aspect_ratio,
         timeout: timeoutSeconds = DEFAULT_TIMEOUT,
       } = args as {
-        image: string;
+        images: string[];
         prompt: string;
         mask?: string;
         size?: string;
@@ -410,12 +413,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const timeoutMs = Math.max(1000, timeoutSeconds * 1000);
 
       if (PROVIDER === "openai") {
-        const content = await handleOpenAIEdit({ image, prompt, mask, size, quality, n, timeout: timeoutMs });
+        const content = await handleOpenAIEdit({ images, prompt, mask, size, quality, n, timeout: timeoutMs });
         return { content };
       }
 
       if (PROVIDER === "gemini") {
-        const content = await handleGeminiEdit({ image, prompt, aspect_ratio, n, timeout: timeoutMs });
+        const content = await handleGeminiEdit({ images, prompt, aspect_ratio, n, timeout: timeoutMs });
         return { content };
       }
 

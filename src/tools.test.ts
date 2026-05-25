@@ -37,6 +37,12 @@ describe('OpenAI provider tools', () => {
     expect(edit.description).toContain('OpenAI');
   });
 
+  it('edit_image should expose images as array', () => {
+    expect(editSchema.properties.images).toBeDefined();
+    expect(editSchema.properties.images.type).toBe('array');
+    expect(editSchema.required).toContain('images');
+  });
+
   it('edit_image should expose mask (OpenAI)', () => {
     expect(editSchema.properties.mask).toBeDefined();
   });
@@ -80,6 +86,12 @@ describe('Gemini provider tools', () => {
     expect(edit.description).toContain('Gemini');
   });
 
+  it('edit_image should expose images as array', () => {
+    expect(editSchema.properties.images).toBeDefined();
+    expect(editSchema.properties.images.type).toBe('array');
+    expect(editSchema.required).toContain('images');
+  });
+
   it('edit_image should expose aspect_ratio (Gemini)', () => {
     expect(editSchema.properties.aspect_ratio).toBeDefined();
   });
@@ -103,12 +115,13 @@ describe('Provider-agnostic', () => {
     }
   });
 
-  it('should always have image + prompt in edit_image', () => {
+  it('should always have images + prompt in edit_image', () => {
     for (const p of ['openai', 'gemini'] as const) {
       const [, edit] = createTools(p, 300);
       const schema = edit.inputSchema as any;
-      expect(schema.required).toContain('image');
+      expect(schema.required).toContain('images');
       expect(schema.required).toContain('prompt');
+      expect(schema.properties.images.type).toBe('array');
     }
   });
 
