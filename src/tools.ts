@@ -11,7 +11,6 @@ export const GENERATE_IMAGE_TOOL: Tool = {
   name: "generate_image",
   description:
     "Generate an image from a text prompt. " +
-    "The provider (OpenAI or Gemini) and model are configured via environment variables IMAGEGEN_PROVIDER and IMAGEGEN_MODEL. " +
     "Returns MCP ImageContent blocks (base64 PNG/JPEG). " +
     "Image generation can be slow — the default timeout is 120 s; increase it with the `timeout` parameter if the provider is known to be slow.",
   inputSchema: {
@@ -78,9 +77,8 @@ export const EDIT_IMAGE_TOOL: Tool = {
   name: "edit_image",
   description:
     "Edit an existing image using a text prompt. " +
-    "The provider (OpenAI or Gemini) and model are configured via environment variables IMAGEGEN_PROVIDER and IMAGEGEN_MODEL. " +
-    "For OpenAI: supports inpainting/outpainting via an optional mask image. The image can be an absolute file path or base64-encoded string. " +
-    "For Gemini: provide the original image as base64 or file path and describe the desired edit in the prompt. " +
+    "The image can be an absolute file path or a base64-encoded string. " +
+    "Optionally provide a mask image for inpainting (specify areas to edit). " +
     "Returns MCP ImageContent blocks (base64 PNG/JPEG).",
   inputSchema: {
     type: "object",
@@ -89,7 +87,7 @@ export const EDIT_IMAGE_TOOL: Tool = {
         type: "string",
         description:
           "The image to edit. Can be an absolute file path (e.g., /path/to/image.png) or a base64-encoded image string (optionally as a data URL like data:image/png;base64,...). " +
-          "Supported formats: PNG, JPEG, WebP. Max size: 25MB for OpenAI.",
+          "Supported formats: PNG, JPEG, WebP.",
       },
       prompt: {
         type: "string",
@@ -100,11 +98,10 @@ export const EDIT_IMAGE_TOOL: Tool = {
       mask: {
         type: "string",
         description:
-          "Optional mask image for inpainting — only used with OpenAI gpt-image-* models. " +
+          "Optional mask image for inpainting. " +
           "Can be an absolute file path or base64-encoded string. " +
           "Must be a PNG image with the same dimensions as the input image. " +
-          "Fully transparent areas indicate where the edit should be applied. " +
-          "Max size: 4MB.",
+          "Fully transparent areas indicate where the edit should be applied.",
       },
       size: {
         type: "string",

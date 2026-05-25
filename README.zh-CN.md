@@ -1,5 +1,7 @@
 # ImageGen MCP Server
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 AI 图片生成与编辑 MCP 服务器，支持 OpenAI 和 Google Gemini 双 Provider，返回标准 MCP `ImageContent`（base64）。
 
 ## 特性
