@@ -15,9 +15,19 @@ AI 图片生成与编辑 MCP 服务器，支持 OpenAI 和 Google Gemini 双 Pro
 - 支持自定义 API 代理地址（`OPENAI_BASE_URL` / `GEMINI_BASE_URL`）
 - 支持 `.env` 自动加载，也支持通过 CLI 参数传配置
 
-## 快速开始
+## 安装
+
+无需安装，通过 `npx` 直接运行：
 
 ```bash
+npx -y github:ptbsare/imagegen-mcp-server
+```
+
+或克隆到本地构建：
+
+```bash
+git clone https://github.com/ptbsare/imagegen-mcp-server.git
+cd imagegen-mcp-server
 npm install
 npm run build
 ```
@@ -41,14 +51,14 @@ npm run build
 
 ## 使用方式
 
-### npx 直接运行
+### npx 直接运行（推荐）
 
 ```bash
 # OpenAI
-npx -y imagegen-mcp-server --provider openai --model gpt-image-1
+npx -y github:ptbsare/imagegen-mcp-server --provider openai --model gpt-image-1
 
 # Gemini
-npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
+npx -y github:ptbsare/imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
 ```
 
 ### 环境变量方式
@@ -56,7 +66,7 @@ npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
 ```bash
 IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
   GEMINI_API_KEY=your-key \
-  npx -y imagegen-mcp-server
+  npx -y github:ptbsare/imagegen-mcp-server
 ```
 
 ### Claude Desktop / Cursor（stdio 模式）
@@ -66,12 +76,31 @@ IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
   "mcpServers": {
     "imagegen": {
       "command": "npx",
-      "args": ["-y", "imagegen-mcp-server"],
+      "args": ["-y", "github:ptbsare/imagegen-mcp-server"],
       "env": {
         "IMAGEGEN_PROVIDER": "openai",
         "IMAGEGEN_MODEL": "gpt-image-1",
         "OPENAI_API_KEY": "sk-...",
         "OPENAI_BASE_URL": "https://your-proxy.com/v1"
+      }
+    }
+  }
+}
+```
+
+### 配合代理和自定义模型
+
+```json
+{
+  "mcpServers": {
+    "imagegen": {
+      "command": "npx",
+      "args": ["-y", "github:ptbsare/imagegen-mcp-server"],
+      "env": {
+        "IMAGEGEN_PROVIDER": "openai",
+        "IMAGEGEN_MODEL": "gpt-image-2",
+        "OPENAI_API_KEY": "sk-...",
+        "OPENAI_BASE_URL": "https://your-openai-compatible-proxy.com/v1"
       }
     }
   }
@@ -86,7 +115,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const transport = new StdioClientTransport({
   command: "npx",
-  args: ["-y", "imagegen-mcp-server"],
+  args: ["-y", "github:ptbsare/imagegen-mcp-server"],
   env: {
     IMAGEGEN_PROVIDER: "gemini",
     IMAGEGEN_MODEL: "gemini-2.5-flash-image",
@@ -96,13 +125,13 @@ const transport = new StdioClientTransport({
 const client = new Client({ name: "my-app", version: "1.0.0" }, { capabilities: {} });
 await client.connect(transport);
 
-// Generate
+// 生成图片
 const result = await client.callTool({
   name: "generate_image",
   arguments: { prompt: "A cat in space" },
 });
 
-// Edit
+// 编辑图片
 const editResult = await client.callTool({
   name: "edit_image",
   arguments: {
@@ -123,7 +152,7 @@ const editResult = await client.callTool({
 | `quality` | 否 | `standard` | 图片质量 |
 | `n` | 否 | `1` | 生成数量 |
 | `aspect_ratio` | 否 | `1:1` | 宽高比（仅 Gemini） |
-| `timeout` | 否 | `120` | 超时秒数 |
+| `timeout` | 否 | `180` | 超时秒数 |
 
 ### `edit_image`
 
@@ -136,7 +165,7 @@ const editResult = await client.callTool({
 | `quality` | 否 | `standard` | 图片质量（仅 OpenAI） |
 | `n` | 否 | `1` | 生成数量 |
 | `aspect_ratio` | 否 | `1:1` | 宽高比（仅 Gemini） |
-| `timeout` | 否 | `120` | 超时秒数 |
+| `timeout` | 否 | `180` | 超时秒数 |
 
 ## 支持的模型
 
@@ -146,7 +175,7 @@ const editResult = await client.callTool({
 ## SSE / HTTP 模式
 
 ```bash
-MCP_TRANSPORT=sse MCP_PORT=3000 npx -y imagegen-mcp-server
+MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 ```
 
 端点：

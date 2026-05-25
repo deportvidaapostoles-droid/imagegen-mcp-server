@@ -15,9 +15,19 @@ An MCP server for AI image generation and editing with dual-provider support for
 - Custom API proxy endpoints (`OPENAI_BASE_URL` / `GEMINI_BASE_URL`)
 - Auto-loads `.env`, also supports CLI arguments for MCP clients that cannot pass `env`
 
-## Quick Start
+## Installation
+
+No installation required — run directly via `npx`:
 
 ```bash
+npx -y github:ptbsare/imagegen-mcp-server
+```
+
+Or clone and build locally:
+
+```bash
+git clone https://github.com/ptbsare/imagegen-mcp-server.git
+cd imagegen-mcp-server
 npm install
 npm run build
 ```
@@ -41,14 +51,14 @@ npm run build
 
 ## Usage
 
-### npx
+### npx (recommended)
 
 ```bash
 # OpenAI
-npx -y imagegen-mcp-server --provider openai --model gpt-image-1
+npx -y github:ptbsare/imagegen-mcp-server --provider openai --model gpt-image-1
 
 # Gemini
-npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
+npx -y github:ptbsare/imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
 ```
 
 ### Environment variables
@@ -56,7 +66,7 @@ npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
 ```bash
 IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
   GEMINI_API_KEY=your-key \
-  npx -y imagegen-mcp-server
+  npx -y github:ptbsare/imagegen-mcp-server
 ```
 
 ### Claude Desktop / Cursor (stdio)
@@ -66,12 +76,31 @@ IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
   "mcpServers": {
     "imagegen": {
       "command": "npx",
-      "args": ["-y", "imagegen-mcp-server"],
+      "args": ["-y", "github:ptbsare/imagegen-mcp-server"],
       "env": {
         "IMAGEGEN_PROVIDER": "openai",
         "IMAGEGEN_MODEL": "gpt-image-1",
         "OPENAI_API_KEY": "sk-...",
         "OPENAI_BASE_URL": "https://your-proxy.com/v1"
+      }
+    }
+  }
+}
+```
+
+### With a proxy and custom model
+
+```json
+{
+  "mcpServers": {
+    "imagegen": {
+      "command": "npx",
+      "args": ["-y", "github:ptbsare/imagegen-mcp-server"],
+      "env": {
+        "IMAGEGEN_PROVIDER": "openai",
+        "IMAGEGEN_MODEL": "gpt-image-2",
+        "OPENAI_API_KEY": "sk-...",
+        "OPENAI_BASE_URL": "https://your-openai-compatible-proxy.com/v1"
       }
     }
   }
@@ -86,7 +115,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const transport = new StdioClientTransport({
   command: "npx",
-  args: ["-y", "imagegen-mcp-server"],
+  args: ["-y", "github:ptbsare/imagegen-mcp-server"],
   env: {
     IMAGEGEN_PROVIDER: "gemini",
     IMAGEGEN_MODEL: "gemini-2.5-flash-image",
@@ -96,13 +125,13 @@ const transport = new StdioClientTransport({
 const client = new Client({ name: "my-app", version: "1.0.0" }, { capabilities: {} });
 await client.connect(transport);
 
-// Generate
+// Generate an image
 const result = await client.callTool({
   name: "generate_image",
   arguments: { prompt: "A cat in space" },
 });
 
-// Edit
+// Edit an image
 const editResult = await client.callTool({
   name: "edit_image",
   arguments: {
@@ -123,7 +152,7 @@ const editResult = await client.callTool({
 | `quality` | No | `standard` | Image quality |
 | `n` | No | `1` | Number of images |
 | `aspect_ratio` | No | `1:1` | Aspect ratio (Gemini only) |
-| `timeout` | No | `120` | Timeout in seconds |
+| `timeout` | No | `180` | Timeout in seconds |
 
 ### `edit_image`
 
@@ -131,12 +160,12 @@ const editResult = await client.callTool({
 |-----------|----------|---------|-------------|
 | `image` | Yes | - | Image to edit: file path or base64 string |
 | `prompt` | Yes | - | Description of the desired edit |
-| `mask` | No | - | Mask image for inpainting (OpenAI only) |
+| `mask` | No | - | Mask image for inpainting |
 | `size` | No | provider-dependent | Output dimensions (OpenAI only) |
 | `quality` | No | `standard` | Image quality (OpenAI only) |
 | `n` | No | `1` | Number of images |
 | `aspect_ratio` | No | `1:1` | Aspect ratio (Gemini only) |
-| `timeout` | No | `120` | Timeout in seconds |
+| `timeout` | No | `180` | Timeout in seconds |
 
 ## Supported Models
 
@@ -146,7 +175,7 @@ const editResult = await client.callTool({
 ## SSE / HTTP Mode
 
 ```bash
-MCP_TRANSPORT=sse MCP_PORT=3000 npx -y imagegen-mcp-server
+MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 ```
 
 Endpoints:
