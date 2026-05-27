@@ -42,6 +42,7 @@ npm run build
 | `IMAGEGEN_MODEL` | Yes | `gpt-image-1` | Model name |
 | `IMAGEGEN_TIMEOUT` | No | `300` | Default tool timeout in seconds |
 | `IMAGEGEN_ASYNC_ONLY` | No | `false` | Only expose async task tools |
+| `IMAGEGEN_BLOCKING_POLL` | No | `false` | Block get_task for 30s to prevent rapid polling |
 | `OPENAI_API_KEY` | When provider=openai | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | No | - | OpenAI API proxy URL |
 | `GEMINI_API_KEY` | When provider=gemini | - | Gemini API Key |
@@ -204,6 +205,10 @@ The recommended workflow for slow image generation:
 ```
 
 **Why async?** Image generation can take 30-120+ seconds. The async pattern prevents MCP client timeouts by decoupling submission from result retrieval.
+
+### Blocking Poll Mode
+
+Set `IMAGEGEN_BLOCKING_POLL=true` to make `get_task` block for up to 30 seconds waiting for task completion. This is useful when the MCP client cannot easily implement polling loops. If the task completes within 30s, the result is returned directly. Otherwise, it returns a "still processing" status.
 
 ## Supported Models
 

@@ -98,6 +98,7 @@ const DEFAULT_TIMEOUT = runtimeConfig.timeout;
 const ASYNC_TOOLS = [SUBMIT_TASK_TOOL, GET_TASK_TOOL];
 const SYNC_TOOLS = createTools(PROVIDER, DEFAULT_TIMEOUT);
 const TOOLS = runtimeConfig.asyncOnly ? ASYNC_TOOLS : [...ASYNC_TOOLS, ...SYNC_TOOLS];
+const BLOCKING_POLL = runtimeConfig.blockingPoll;
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
@@ -448,6 +449,64 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
   const task = taskStore.get(taskId);
   if (!task) {
     return createErrorResponse(`Task not found: ${taskId}`);
+  }
+
+  // Blocking poll: wait up to 30s for task completion
+  if (BLOCKING_POLL && (task.status === "pending" || task.status === "processing")) {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      // Refresh task from store (processTask updates it in-place)
+      const current = taskStore.get(taskId);
+      if (!current || current.status === "completed" || current.status === "failed") {
+        break;
+      }
+      // Sleep 2s between checks
+      const remaining = deadline - Date.now();
+      const sleepMs = Math.min(2000, remaining);
+      if (sleepMs > 0) {
+        const sleepPromise = new Promise(resolve => setTimeout(resolve, sleepMs));
+        // Use a synchronous-like busy wait for stdio compatibility
+        const start = Date.now();
+        while (Date.now() - start < sleepMs) { /* busy wait */ }
+      }
+    }
+    // Re-read final status
+    const finalTask = taskStore.get(taskId);
+    if (!finalTask) {
+      return createErrorResponse(`Task not found: ${taskId}`);
+    }
+    if (finalTask.status === "completed") {
+      const content: (TextContent | ImageContent)[] = [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            task_id: taskId,
+            status: "completed",
+            image_count: finalTask.images.length,
+          }, null, 2),
+        },
+      ];
+      for (const b64 of finalTask.images) {
+        content.push({ type: "image", data: b64, mimeType: finalTask.mimeType });
+      }
+      return { content };
+    }
+    if (finalTask.status === "failed") {
+      return createErrorResponse(`Task failed: ${finalTask.error || "Unknown error"}`);
+    }
+    // Still processing after 30s
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            task_id: taskId,
+            status: finalTask.status,
+            message: "Task is still processing after 30s. Check again later.",
+          }, null, 2),
+        },
+      ],
+    };
   }
 
   if (task.status === "pending" || task.status === "processing") {

@@ -8,6 +8,7 @@ export type ConfigKey =
   | 'IMAGEGEN_MODEL'
   | 'IMAGEGEN_TIMEOUT'
   | 'IMAGEGEN_ASYNC_ONLY'
+  | 'IMAGEGEN_BLOCKING_POLL'
   | 'OPENAI_API_KEY'
   | 'OPENAI_BASE_URL'
   | 'GEMINI_API_KEY'
@@ -32,11 +33,12 @@ const CLI_FLAG_TO_CONFIG_KEY: Record<string, ConfigKey> = {
   'mcp-port': 'MCP_PORT',
   'timeout': 'IMAGEGEN_TIMEOUT',
   'async-only': 'IMAGEGEN_ASYNC_ONLY',
+  'blocking-poll': 'IMAGEGEN_BLOCKING_POLL',
   'openai-image-model': 'OPENAI_IMAGE_MODEL',
   'openai-image-prompt': 'OPENAI_IMAGE_PROMPT',
 };
 
-const BOOLEAN_CONFIG_KEYS = new Set<ConfigKey>(['MCP_STDIO_LOGS', 'IMAGEGEN_ASYNC_ONLY']);
+const BOOLEAN_CONFIG_KEYS = new Set<ConfigKey>(['MCP_STDIO_LOGS', 'IMAGEGEN_ASYNC_ONLY', 'IMAGEGEN_BLOCKING_POLL']);
 
 const PLACEHOLDER_VALUES: Partial<Record<ConfigKey, string[]>> = {
   OPENAI_API_KEY: ['sk-your-openai-api-key', 'your-openai-api-key', 'your-key'],
@@ -48,6 +50,7 @@ export interface ServerRuntimeConfig {
   model: string;
   timeout: number;
   asyncOnly: boolean;
+  blockingPoll: boolean;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   geminiApiKey?: string;
@@ -192,6 +195,7 @@ export function getServerRuntimeConfig(
     model,
     timeout: parseTimeout(values.IMAGEGEN_TIMEOUT, warnings),
     asyncOnly: parseBooleanConfig(values.IMAGEGEN_ASYNC_ONLY),
+    blockingPoll: parseBooleanConfig(values.IMAGEGEN_BLOCKING_POLL),
     openaiApiKey: values.OPENAI_API_KEY,
     openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
@@ -214,6 +218,7 @@ export function getCliHelpText(): string {
     '  IMAGEGEN_MODEL       Model name (default: gpt-image-1)',
     '  IMAGEGEN_TIMEOUT     Default tool timeout in seconds (default: 300)',
     '  IMAGEGEN_ASYNC_ONLY   Only expose async task tools (default: false)',
+    '  IMAGEGEN_BLOCKING_POLL Block get_task for 30s to prevent rapid polling (default: false)',
     '  OPENAI_API_KEY       OpenAI API key',
     '  OPENAI_BASE_URL      OpenAI API base URL (proxy)',
     '  GEMINI_API_KEY       Gemini API key',
