@@ -451,9 +451,9 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
     return createErrorResponse(`Task not found: ${taskId}`);
   }
 
-  // Blocking poll: wait up to 30s for task completion
+  // Blocking poll: wait up to 120s for task completion
   if (BLOCKING_POLL && (task.status === "pending" || task.status === "processing")) {
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + 120_000;
     while (Date.now() < deadline) {
       // Refresh task from store (processTask updates it in-place)
       const current = taskStore.get(taskId);
@@ -494,7 +494,7 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
     if (finalTask.status === "failed") {
       return createErrorResponse(`Task failed: ${finalTask.error || "Unknown error"}`);
     }
-    // Still processing after 30s
+    // Still processing after 120s
     return {
       content: [
         {
@@ -502,7 +502,7 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
           text: JSON.stringify({
             task_id: taskId,
             status: finalTask.status,
-            message: "Task is still processing after 30s. Check again later.",
+            message: "Task is still processing after 120s. Check again later.",
           }, null, 2),
         },
       ],

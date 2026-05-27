@@ -218,7 +218,7 @@ export function getCliHelpText(): string {
     '  IMAGEGEN_MODEL       Model name (default: gpt-image-1)',
     '  IMAGEGEN_TIMEOUT     Default tool timeout in seconds (default: 300)',
     '  IMAGEGEN_ASYNC_ONLY   Only expose async task tools (default: false)',
-    '  IMAGEGEN_BLOCKING_POLL Block get_task for 30s to prevent rapid polling (default: false)',
+    '  IMAGEGEN_BLOCKING_POLL Block get_task for 120s to prevent rapid polling (default: false)',
     '  OPENAI_API_KEY       OpenAI API key',
     '  OPENAI_BASE_URL      OpenAI API base URL (proxy)',
     '  GEMINI_API_KEY       Gemini API key',
