@@ -88,16 +88,16 @@ export function formatErrorMessage(error: unknown): string {
  * Create an error response object
  */
 export function createErrorResponse(errorMessage: string): {
-  content: Array<{ type: string; text: string }>;
-  isError: boolean;
+  content: Array<{ type: "text"; text: string }>;
+  isError: true;
 } {
   return {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: JSON.stringify({ success: false, error: errorMessage }, null, 2),
       },
     ],
-    isError: true,
+    isError: true as const,
   };
 }

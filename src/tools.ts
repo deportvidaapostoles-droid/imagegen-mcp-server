@@ -172,9 +172,75 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
 }
 
 /**
+ * Submit an image generation or editing task.
+ * Returns immediately with a task_id. Use get_task to poll for results.
+ */
+export const SUBMIT_TASK_TOOL: Tool = {
+  name: "submit_task",
+  description:
+    "Submit an image generation or editing task to be processed in the background. " +
+    "Returns immediately with a task_id. Use get_task to check status and retrieve results. " +
+    "Supports both text-to-image generation and image editing.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      kind: {
+        type: "string",
+        description:
+          "Type of task: 'generate' for text-to-image, 'edit' for image editing.",
+        enum: ["generate", "edit"],
+      },
+      prompt: {
+        type: "string",
+        description:
+          "Text prompt describing the image to generate or the desired edit. " +
+          "For edits: 'Add a rainbow', 'Remove the person', etc.",
+      },
+      images: {
+        type: "array",
+        description:
+          "Required for 'edit' tasks. One or more input images. " +
+          "Each can be an absolute file path or base64-encoded string.",
+        items: {
+          type: "string",
+          description: "File path or base64-encoded image.",
+        },
+      },
+    },
+    required: ["kind", "prompt"],
+  },
+};
+
+/**
+ * Get the status and result of a submitted task.
+ * Returns processing status, or completed images as MCP ImageContent.
+ */
+export const GET_TASK_TOOL: Tool = {
+  name: "get_task",
+  description:
+    "Check the status of a submitted task. " +
+    "If still processing, returns status 'pending' or 'processing'. " +
+    "If completed, returns status 'completed' with the generated images as MCP ImageContent blocks. " +
+    "If failed, returns an error message.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      task_id: {
+        type: "string",
+        description: "The task_id returned by submit_task.",
+      },
+    },
+    required: ["task_id"],
+  },
+};
+
+/**
  * Static tools for tests (OpenAI provider, 300s timeout).
  */
 export const TOOLS = createTools("openai", 300);
+
+// Full tool list including async tools
+export const ALL_TOOLS: Tool[] = [SUBMIT_TASK_TOOL, GET_TASK_TOOL, ...createTools("openai", 300)];
 
 /**
  * Get tool by name
