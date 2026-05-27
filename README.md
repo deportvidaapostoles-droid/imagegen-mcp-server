@@ -6,14 +6,16 @@ An MCP server for AI image generation and editing with dual-provider support for
 
 ## Features
 
-- **Two tools**: `generate_image` (text-to-image) + `edit_image` (image editing)
+- **Async task tools**: `submit_task` + `get_task` for non-blocking image generation/editing
+- **Sync tools**: `generate_image` + `edit_image` for direct calls (may timeout on slow providers)
 - **Dual provider**: OpenAI-compatible models + Google Gemini
-- **Provider explicitly set** via `IMAGEGEN_PROVIDER` env var (`openai` or `gemini`), not inferred from model name
+- **Provider explicitly set** via `IMAGEGEN_PROVIDER` env var (`openai` or `gemini`)
 - **Model set** via `IMAGEGEN_MODEL` env var — no model parameter in tool calls
 - **Always returns base64 MCP ImageContent** — no temp files saved locally
+- **Multi-image editing** supported for both OpenAI and Gemini
 - Three transports: stdio (default), SSE, HTTP
 - Custom API proxy endpoints (`OPENAI_BASE_URL` / `GEMINI_BASE_URL`)
-- Auto-loads `.env`, also supports CLI arguments for MCP clients that cannot pass `env`
+- Auto-loads `.env`, also supports CLI arguments
 
 ## Installation
 
@@ -39,6 +41,7 @@ npm run build
 | `IMAGEGEN_PROVIDER` | Yes | `openai` | Provider: `openai` or `gemini` |
 | `IMAGEGEN_MODEL` | Yes | `gpt-image-1` | Model name |
 | `IMAGEGEN_TIMEOUT` | No | `300` | Default tool timeout in seconds |
+| `IMAGEGEN_ASYNC_ONLY` | No | `false` | Only expose async task tools |
 | `OPENAI_API_KEY` | When provider=openai | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | No | - | OpenAI API proxy URL |
 | `GEMINI_API_KEY` | When provider=gemini | - | Gemini API Key |
@@ -60,14 +63,9 @@ npx -y github:ptbsare/imagegen-mcp-server --provider openai --model gpt-image-1
 
 # Gemini
 npx -y github:ptbsare/imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
-```
 
-### Environment variables
-
-```bash
-IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
-  GEMINI_API_KEY=your-key \
-  npx -y github:ptbsare/imagegen-mcp-server
+# Async-only mode (only submit_task and get_task tools)
+IMAGEGEN_ASYNC_ONLY=true npx -y github:ptbsare/imagegen-mcp-server
 ```
 
 ### Claude Desktop / Cursor (stdio)
@@ -89,7 +87,7 @@ IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
 }
 ```
 
-### With a proxy and custom model
+### Async-only mode
 
 ```json
 {
@@ -99,74 +97,113 @@ IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image \
       "args": ["-y", "github:ptbsare/imagegen-mcp-server"],
       "env": {
         "IMAGEGEN_PROVIDER": "openai",
-        "IMAGEGEN_MODEL": "gpt-image-2",
-        "OPENAI_API_KEY": "sk-...",
-        "OPENAI_BASE_URL": "https://your-openai-compatible-proxy.com/v1"
+        "IMAGEGEN_MODEL": "gpt-image-1",
+        "IMAGEGEN_ASYNC_ONLY": "true",
+        "OPENAI_API_KEY": "sk-..."
       }
     }
   }
 }
 ```
 
-### MCP SDK Client
-
-```typescript
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-
-const transport = new StdioClientTransport({
-  command: "npx",
-  args: ["-y", "github:ptbsare/imagegen-mcp-server"],
-  env: {
-    IMAGEGEN_PROVIDER: "gemini",
-    IMAGEGEN_MODEL: "gemini-2.5-flash-image",
-    GEMINI_API_KEY: "your-key",
-  },
-});
-const client = new Client({ name: "my-app", version: "1.0.0" }, { capabilities: {} });
-await client.connect(transport);
-
-// Generate an image
-const result = await client.callTool({
-  name: "generate_image",
-  arguments: { prompt: "A cat in space" },
-});
-
-// Edit an image
-const editResult = await client.callTool({
-  name: "edit_image",
-  arguments: {
-    image: "/path/to/image.png",
-    prompt: "Add a rainbow in the sky",
-  },
-});
-```
-
 ## Tools
 
-### `generate_image`
+### Async Tools (always available)
+
+#### `submit_task`
+
+Submit an image generation or editing task. Returns immediately with a `task_id`.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `prompt` | Yes | - | Detailed text description of the image |
+| `kind` | Yes | - | Task type: `generate` or `edit` |
+| `prompt` | Yes | - | Text prompt for generation or edit description |
+| `images` | For `edit` | - | Array of images (file path or base64) |
+
+**Example — Generate:**
+```json
+{
+  "kind": "generate",
+  "prompt": "A photorealistic red apple on a white marble table"
+}
+```
+
+**Example — Edit:**
+```json
+{
+  "kind": "edit",
+  "images": ["/path/to/image.png"],
+  "prompt": "Add a rainbow in the sky"
+}
+```
+
+**Response:**
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "message": "Task submitted. Use get_task with task_id to check status."
+}
+```
+
+#### `get_task`
+
+Check task status and retrieve results.
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `task_id` | Yes | - | The task_id returned by submit_task |
+
+**Response (processing):**
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "processing",
+  "message": "Task is still processing. Check again later."
+}
+```
+
+**Response (completed):**
+Returns `status: "completed"` plus MCP `ImageContent` blocks (one per generated image).
+
+### Sync Tools (disabled when `IMAGEGEN_ASYNC_ONLY=true`)
+
+#### `generate_image`
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `prompt` | Yes | - | Detailed text description |
 | `size` | No | provider-dependent | Image dimensions (OpenAI only) |
-| `quality` | No | `standard` | Image quality |
-| `n` | No | `1` | Number of images |
+| `quality` | No | `standard` | Image quality (OpenAI only) |
+| `n` | No | `1` | Number of images (OpenAI only) |
 | `aspect_ratio` | No | `1:1` | Aspect ratio (Gemini only) |
 | `timeout` | No | env `IMAGEGEN_TIMEOUT` | Timeout in seconds |
 
-### `edit_image`
+#### `edit_image`
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `image` | Yes | - | Image to edit: file path or base64 string |
+| `images` | Yes | - | Images to edit (file path or base64) |
 | `prompt` | Yes | - | Description of the desired edit |
-| `mask` | No | - | Mask image for inpainting |
+| `mask` | No | - | Mask image for inpainting (OpenAI only) |
 | `size` | No | provider-dependent | Output dimensions (OpenAI only) |
 | `quality` | No | `standard` | Image quality (OpenAI only) |
-| `n` | No | `1` | Number of images |
+| `n` | No | `1` | Number of images (OpenAI only) |
 | `aspect_ratio` | No | `1:1` | Aspect ratio (Gemini only) |
 | `timeout` | No | env `IMAGEGEN_TIMEOUT` | Timeout in seconds |
+
+## Async Workflow
+
+The recommended workflow for slow image generation:
+
+```
+1. submit_task → returns task_id immediately
+2. get_task(task_id) → returns "processing"
+3. get_task(task_id) → returns "processing"
+4. get_task(task_id) → returns "completed" + ImageContent[]
+```
+
+**Why async?** Image generation can take 30-120+ seconds. The async pattern prevents MCP client timeouts by decoupling submission from result retrieval.
 
 ## Supported Models
 
@@ -178,11 +215,6 @@ const editResult = await client.callTool({
 ```bash
 MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 ```
-
-Endpoints:
-- `GET /sse` — SSE connection
-- `POST /message?sessionId=xxx` — Send message
-- `GET /` — Health check
 
 ## Development
 

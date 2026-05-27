@@ -7,6 +7,7 @@ export type ConfigKey =
   | 'IMAGEGEN_PROVIDER'
   | 'IMAGEGEN_MODEL'
   | 'IMAGEGEN_TIMEOUT'
+  | 'IMAGEGEN_ASYNC_ONLY'
   | 'OPENAI_API_KEY'
   | 'OPENAI_BASE_URL'
   | 'GEMINI_API_KEY'
@@ -30,11 +31,12 @@ const CLI_FLAG_TO_CONFIG_KEY: Record<string, ConfigKey> = {
   'mcp-host': 'MCP_HOST',
   'mcp-port': 'MCP_PORT',
   'timeout': 'IMAGEGEN_TIMEOUT',
+  'async-only': 'IMAGEGEN_ASYNC_ONLY',
   'openai-image-model': 'OPENAI_IMAGE_MODEL',
   'openai-image-prompt': 'OPENAI_IMAGE_PROMPT',
 };
 
-const BOOLEAN_CONFIG_KEYS = new Set<ConfigKey>(['MCP_STDIO_LOGS']);
+const BOOLEAN_CONFIG_KEYS = new Set<ConfigKey>(['MCP_STDIO_LOGS', 'IMAGEGEN_ASYNC_ONLY']);
 
 const PLACEHOLDER_VALUES: Partial<Record<ConfigKey, string[]>> = {
   OPENAI_API_KEY: ['sk-your-openai-api-key', 'your-openai-api-key', 'your-key'],
@@ -45,6 +47,7 @@ export interface ServerRuntimeConfig {
   provider: ProviderType;
   model: string;
   timeout: number;
+  asyncOnly: boolean;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   geminiApiKey?: string;
@@ -166,13 +169,11 @@ export function getServerRuntimeConfig(
     }
   }
 
-  // Provider: explicit from config
   const providerRaw = values.IMAGEGEN_PROVIDER ?? 'openai';
   const provider: ProviderType = isProviderType(providerRaw)
     ? providerRaw
     : withWarning(warnings, `Invalid IMAGEGEN_PROVIDER '${providerRaw}', falling back to 'openai'`, 'openai' as ProviderType);
 
-  // Model: from config
   const model = values.IMAGEGEN_MODEL ?? 'gpt-image-1';
 
   const transportCandidate = values.MCP_TRANSPORT ?? 'stdio';
@@ -190,6 +191,7 @@ export function getServerRuntimeConfig(
     provider,
     model,
     timeout: parseTimeout(values.IMAGEGEN_TIMEOUT, warnings),
+    asyncOnly: parseBooleanConfig(values.IMAGEGEN_ASYNC_ONLY),
     openaiApiKey: values.OPENAI_API_KEY,
     openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
@@ -210,6 +212,8 @@ export function getCliHelpText(): string {
     'Environment variables / CLI options (CLI > environment > defaults):',
     '  IMAGEGEN_PROVIDER    Provider: openai | gemini (default: openai)',
     '  IMAGEGEN_MODEL       Model name (default: gpt-image-1)',
+    '  IMAGEGEN_TIMEOUT     Default tool timeout in seconds (default: 300)',
+    '  IMAGEGEN_ASYNC_ONLY   Only expose async task tools (default: false)',
     '  OPENAI_API_KEY       OpenAI API key',
     '  OPENAI_BASE_URL      OpenAI API base URL (proxy)',
     '  GEMINI_API_KEY       Gemini API key',
@@ -218,11 +222,12 @@ export function getCliHelpText(): string {
     '  MCP_STDIO_LOGS       Enable logs on stderr in stdio mode',
     '  MCP_HOST             SSE/HTTP bind host (default: localhost)',
     '  MCP_PORT             SSE/HTTP bind port (default: 3000)',
-    '  IMAGEGEN_TIMEOUT     Default tool timeout in seconds (default: 300)',
     '',
     'CLI flags:',
     '  --provider <openai|gemini>',
     '  --model <model-name>',
+    '  --timeout <seconds>',
+    '  --async-only',
     '  --openai-api-key <value>',
     '  --openai-base-url <value>',
     '  --gemini-api-key <value>',
@@ -236,6 +241,6 @@ export function getCliHelpText(): string {
     'Examples:',
     '  npx -y imagegen-mcp-server --provider openai --model gpt-image-1',
     '  npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image',
-    '  IMAGEGEN_PROVIDER=gemini IMAGEGEN_MODEL=gemini-2.5-flash-image npx -y imagegen-mcp-server',
+    '  IMAGEGEN_ASYNC_ONLY=true npx -y imagegen-mcp-server',
   ].join('\n');
 }

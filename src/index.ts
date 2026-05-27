@@ -97,7 +97,7 @@ const MODEL = runtimeConfig.model;
 const DEFAULT_TIMEOUT = runtimeConfig.timeout;
 const ASYNC_TOOLS = [SUBMIT_TASK_TOOL, GET_TASK_TOOL];
 const SYNC_TOOLS = createTools(PROVIDER, DEFAULT_TIMEOUT);
-const TOOLS = [...ASYNC_TOOLS, ...SYNC_TOOLS];
+const TOOLS = runtimeConfig.asyncOnly ? ASYNC_TOOLS : [...ASYNC_TOOLS, ...SYNC_TOOLS];
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
