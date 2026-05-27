@@ -9,6 +9,7 @@ export type ConfigKey =
   | 'IMAGEGEN_TIMEOUT'
   | 'IMAGEGEN_ASYNC_ONLY'
   | 'IMAGEGEN_BLOCKING_POLL'
+  | 'IMAGEGEN_BLOCKING_POLL_TIMEOUT'
   | 'OPENAI_API_KEY'
   | 'OPENAI_BASE_URL'
   | 'GEMINI_API_KEY'
@@ -34,6 +35,7 @@ const CLI_FLAG_TO_CONFIG_KEY: Record<string, ConfigKey> = {
   'timeout': 'IMAGEGEN_TIMEOUT',
   'async-only': 'IMAGEGEN_ASYNC_ONLY',
   'blocking-poll': 'IMAGEGEN_BLOCKING_POLL',
+  'blocking-poll-timeout': 'IMAGEGEN_BLOCKING_POLL_TIMEOUT',
   'openai-image-model': 'OPENAI_IMAGE_MODEL',
   'openai-image-prompt': 'OPENAI_IMAGE_PROMPT',
 };
@@ -51,6 +53,7 @@ export interface ServerRuntimeConfig {
   timeout: number;
   asyncOnly: boolean;
   blockingPoll: boolean;
+  blockingPollTimeout: number;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   geminiApiKey?: string;
@@ -146,12 +149,12 @@ function withWarning<T>(warnings: string[], warning: string, fallback: T): T {
   return fallback;
 }
 
-function parseTimeout(value: string | undefined, warnings: string[]): number {
-  if (value === undefined) return 300;
+function parseTimeout(value: string | undefined, warnings: string[], fallback: number, label: string): number {
+  if (value === undefined) return fallback;
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    warnings.push(`Invalid IMAGEGEN_TIMEOUT '${value}', falling back to 300`);
-    return 300;
+    warnings.push(`Invalid ${label} '${value}', falling back to ${fallback}`);
+    return fallback;
   }
   return parsed;
 }
@@ -193,9 +196,10 @@ export function getServerRuntimeConfig(
   return {
     provider,
     model,
-    timeout: parseTimeout(values.IMAGEGEN_TIMEOUT, warnings),
+    timeout: parseTimeout(values.IMAGEGEN_TIMEOUT, warnings, 300, 'IMAGEGEN_TIMEOUT'),
     asyncOnly: parseBooleanConfig(values.IMAGEGEN_ASYNC_ONLY),
     blockingPoll: parseBooleanConfig(values.IMAGEGEN_BLOCKING_POLL),
+    blockingPollTimeout: parseTimeout(values.IMAGEGEN_BLOCKING_POLL_TIMEOUT, warnings, 120, 'IMAGEGEN_BLOCKING_POLL_TIMEOUT'),
     openaiApiKey: values.OPENAI_API_KEY,
     openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
@@ -218,7 +222,8 @@ export function getCliHelpText(): string {
     '  IMAGEGEN_MODEL       Model name (default: gpt-image-1)',
     '  IMAGEGEN_TIMEOUT     Default tool timeout in seconds (default: 300)',
     '  IMAGEGEN_ASYNC_ONLY   Only expose async task tools (default: false)',
-    '  IMAGEGEN_BLOCKING_POLL Block get_task for 120s to prevent rapid polling (default: false)',
+    '  IMAGEGEN_BLOCKING_POLL         Block get_task to prevent rapid polling (default: false)',
+    '  IMAGEGEN_BLOCKING_POLL_TIMEOUT Blocking poll timeout in seconds (default: 120)',
     '  OPENAI_API_KEY       OpenAI API key',
     '  OPENAI_BASE_URL      OpenAI API base URL (proxy)',
     '  GEMINI_API_KEY       Gemini API key',

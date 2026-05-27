@@ -99,6 +99,7 @@ const ASYNC_TOOLS = [SUBMIT_TASK_TOOL, GET_TASK_TOOL];
 const SYNC_TOOLS = createTools(PROVIDER, DEFAULT_TIMEOUT);
 const TOOLS = runtimeConfig.asyncOnly ? ASYNC_TOOLS : [...ASYNC_TOOLS, ...SYNC_TOOLS];
 const BLOCKING_POLL = runtimeConfig.blockingPoll;
+const BLOCKING_POLL_TIMEOUT = runtimeConfig.blockingPollTimeout * 1000;
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
@@ -453,7 +454,7 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
 
   // Blocking poll: wait up to 120s for task completion
   if (BLOCKING_POLL && (task.status === "pending" || task.status === "processing")) {
-    const deadline = Date.now() + 120_000;
+    const deadline = Date.now() + BLOCKING_POLL_TIMEOUT;
     while (Date.now() < deadline) {
       // Refresh task from store (processTask updates it in-place)
       const current = taskStore.get(taskId);

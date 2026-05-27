@@ -42,7 +42,8 @@ npm run build
 | `IMAGEGEN_MODEL` | Yes | `gpt-image-1` | Model name |
 | `IMAGEGEN_TIMEOUT` | No | `300` | Default tool timeout in seconds |
 | `IMAGEGEN_ASYNC_ONLY` | No | `false` | Only expose async task tools |
-| `IMAGEGEN_BLOCKING_POLL` | No | `false` | Block get_task for 120s to prevent rapid polling |
+| `IMAGEGEN_BLOCKING_POLL` | No | `false` | Block get_task to prevent rapid polling |
+| `IMAGEGEN_BLOCKING_POLL_TIMEOUT` | No | `120` | Blocking poll timeout in seconds |
 | `OPENAI_API_KEY` | When provider=openai | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | No | - | OpenAI API proxy URL |
 | `GEMINI_API_KEY` | When provider=gemini | - | Gemini API Key |

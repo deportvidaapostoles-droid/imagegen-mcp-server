@@ -42,7 +42,8 @@ npm run build
 | `IMAGEGEN_MODEL` | 是 | `gpt-image-1` | 模型名 |
 | `IMAGEGEN_TIMEOUT` | 否 | `300` | 工具默认超时秒数 |
 | `IMAGEGEN_ASYNC_ONLY` | 否 | `false` | 只暴露异步任务工具 |
-| `IMAGEGEN_BLOCKING_POLL` | 否 | `false` | get_task 阻塞 30 秒避免频繁轮询 |
+| `IMAGEGEN_BLOCKING_POLL` | 否 | `false` | get_task 阻塞等待避免频繁轮询 |
+| `IMAGEGEN_BLOCKING_POLL_TIMEOUT` | 否 | `120` | 阻塞轮询超时秒数 |
 | `OPENAI_API_KEY` | provider=openai 时必填 | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | 否 | - | OpenAI API 代理地址 |
 | `GEMINI_API_KEY` | provider=gemini 时必填 | - | Gemini API Key |
@@ -208,7 +209,7 @@ IMAGEGEN_ASYNC_ONLY=true npx -y github:ptbsare/imagegen-mcp-server
 
 ### 阻塞轮询模式
 
-设置 `IMAGEGEN_BLOCKING_POLL=true` 可让 `get_task` 阻塞等待最多 30 秒，直到任务完成。适用于 MCP 客户端不方便自行实现轮询循环的场景。如果 30 秒内任务完成，直接返回结果；否则返回“仍在处理中”状态。
+设置 `IMAGEGEN_BLOCKING_POLL=true` 可让 `get_task` 阻塞等待最多 120 秒，直到任务完成。适用于 MCP 客户端不方便自行实现轮询循环的场景。如果 120 秒内任务完成，直接返回结果；否则返回“仍在处理中”状态。
 
 ## 支持的模型
 
