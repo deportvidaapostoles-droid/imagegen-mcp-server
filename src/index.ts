@@ -40,6 +40,9 @@ interface Task {
   images: string[];
   mimeType: string;
   error?: string;
+  retries: number;
+  maxRetries: number;
+  taskTimeout: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -101,6 +104,7 @@ const TOOLS = runtimeConfig.asyncOnly ? ASYNC_TOOLS : [...ASYNC_TOOLS, ...SYNC_T
 const BLOCKING_POLL = runtimeConfig.blockingPoll;
 const BLOCKING_POLL_TIMEOUT = runtimeConfig.blockingPollTimeout * 1000;
 const MAX_RETRIES = runtimeConfig.maxRetries;
+const TASK_TIMEOUT = runtimeConfig.taskTimeout * 1000;
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
@@ -294,7 +298,7 @@ async function processTask(task: Task): Promise<void> {
             n: 1,
             size: "auto" as any,
             response_format: "b64_json",
-          });
+          }, { timeout: TASK_TIMEOUT });
           if (response.data) {
             for (const img of response.data) {
               const data = await openAIImageToBase64(img);
@@ -313,7 +317,7 @@ async function processTask(task: Task): Promise<void> {
             prompt: task.prompt,
             model: MODEL,
             response_format: "b64_json",
-          });
+          }, { timeout: TASK_TIMEOUT });
           if (result.data) {
             for (const img of result.data) {
               const data = await openAIImageToBase64(img);
@@ -332,10 +336,16 @@ async function processTask(task: Task): Promise<void> {
         }
         contents.push({ text: task.prompt });
 
-        const result = await geminiClient.models.generateContent({
-          model: MODEL,
-          contents,
-        });
+        const geminiAbort = new AbortController();
+        const geminiTimer = setTimeout(() => geminiAbort.abort(), TASK_TIMEOUT);
+        let result;
+        try {
+          result = await geminiClient.models.generateContent({
+            model: MODEL,
+            contents,
+            config: { abortSignal: geminiAbort.signal },
+          });
+        } finally { clearTimeout(geminiTimer); }
 
         const candidates = result.candidates;
         if (candidates) {
@@ -358,6 +368,7 @@ async function processTask(task: Task): Promise<void> {
       task.images = images;
       task.mimeType = "image/png";
       task.status = "completed";
+      task.retries = attempt - 1;
       task.updatedAt = Date.now();
       return;
     } catch (error) {
@@ -372,6 +383,7 @@ async function processTask(task: Task): Promise<void> {
   }
 
   task.status = "failed";
+  task.retries = MAX_RETRIES;
   task.error = `Failed after ${MAX_RETRIES} attempts. Last error: ${lastError}`;
   task.updatedAt = Date.now();
 }
@@ -398,6 +410,9 @@ function handleSubmitTask(args: Record<string, unknown>): { content: (TextConten
     prompt,
     images: [],
     mimeType: "image/png",
+    retries: 0,
+    maxRetries: MAX_RETRIES,
+    taskTimeout: runtimeConfig.taskTimeout,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -529,6 +544,9 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
             task_id: taskId,
             status: task.status,
             message: "Task is still processing. Check again later.",
+            retries: task.retries,
+            max_retries: task.maxRetries,
+            task_timeout: task.taskTimeout,
           }, null, 2),
         },
       ],
@@ -536,7 +554,19 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
   }
 
   if (task.status === "failed") {
-    return createErrorResponse(`Task failed: ${task.error || "Unknown error"}`);
+    return {
+      content: [{
+        type: "text" as const,
+        text: JSON.stringify({
+          task_id: taskId,
+          status: "failed",
+          error: task.error || "Unknown error",
+          retries: task.retries,
+          max_retries: task.maxRetries,
+          task_timeout: task.taskTimeout,
+        }, null, 2),
+      }],
+    };
   }
 
   // completed
@@ -547,6 +577,9 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
         task_id: taskId,
         status: "completed",
         image_count: task.images.length,
+        retries: task.retries,
+        max_retries: task.maxRetries,
+        task_timeout: task.taskTimeout,
       }, null, 2),
     },
   ];

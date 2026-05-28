@@ -11,6 +11,7 @@ export type ConfigKey =
   | 'IMAGEGEN_BLOCKING_POLL'
   | 'IMAGEGEN_BLOCKING_POLL_TIMEOUT'
   | 'IMAGEGEN_MAX_RETRIES'
+  | 'IMAGEGEN_TASK_TIMEOUT'
   | 'OPENAI_API_KEY'
   | 'OPENAI_BASE_URL'
   | 'GEMINI_API_KEY'
@@ -38,6 +39,7 @@ const CLI_FLAG_TO_CONFIG_KEY: Record<string, ConfigKey> = {
   'blocking-poll': 'IMAGEGEN_BLOCKING_POLL',
   'blocking-poll-timeout': 'IMAGEGEN_BLOCKING_POLL_TIMEOUT',
   'max-retries': 'IMAGEGEN_MAX_RETRIES',
+  'task-timeout': 'IMAGEGEN_TASK_TIMEOUT',
   'openai-image-model': 'OPENAI_IMAGE_MODEL',
   'openai-image-prompt': 'OPENAI_IMAGE_PROMPT',
 };
@@ -57,6 +59,7 @@ export interface ServerRuntimeConfig {
   blockingPoll: boolean;
   blockingPollTimeout: number;
   maxRetries: number;
+  taskTimeout: number;
   openaiApiKey?: string;
   openaiBaseUrl?: string;
   geminiApiKey?: string;
@@ -204,6 +207,7 @@ export function getServerRuntimeConfig(
     blockingPoll: parseBooleanConfig(values.IMAGEGEN_BLOCKING_POLL),
     blockingPollTimeout: parseTimeout(values.IMAGEGEN_BLOCKING_POLL_TIMEOUT, warnings, 120, 'IMAGEGEN_BLOCKING_POLL_TIMEOUT'),
     maxRetries: parseTimeout(values.IMAGEGEN_MAX_RETRIES, warnings, 3, 'IMAGEGEN_MAX_RETRIES'),
+    taskTimeout: parseTimeout(values.IMAGEGEN_TASK_TIMEOUT, warnings, 600, 'IMAGEGEN_TASK_TIMEOUT'),
     openaiApiKey: values.OPENAI_API_KEY,
     openaiBaseUrl: values.OPENAI_BASE_URL,
     geminiApiKey: values.GEMINI_API_KEY,
@@ -229,6 +233,7 @@ export function getCliHelpText(): string {
     '  IMAGEGEN_BLOCKING_POLL         Block get_task to prevent rapid polling (default: false)',
     '  IMAGEGEN_BLOCKING_POLL_TIMEOUT Blocking poll timeout in seconds (default: 120)',
     '  IMAGEGEN_MAX_RETRIES    Max retries on task failure (default: 3)',
+    '  IMAGEGEN_TASK_TIMEOUT    Async task timeout in seconds (default: 600)',
     '  OPENAI_API_KEY       OpenAI API key',
     '  OPENAI_BASE_URL      OpenAI API base URL (proxy)',
     '  GEMINI_API_KEY       Gemini API key',

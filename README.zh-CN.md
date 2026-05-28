@@ -45,6 +45,7 @@ npm run build
 | `IMAGEGEN_BLOCKING_POLL` | 否 | `false` | get_task 阻塞等待避免频繁轮询 |
 | `IMAGEGEN_BLOCKING_POLL_TIMEOUT` | 否 | `120` | 阻塞轮询超时秒数 |
 | `IMAGEGEN_MAX_RETRIES` | 否 | `3` | 任务失败最大重试次数 |
+| `IMAGEGEN_TASK_TIMEOUT` | 否 | `600` | 异步任务超时秒数 |
 | `OPENAI_API_KEY` | provider=openai 时必填 | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | 否 | - | OpenAI API 代理地址 |
 | `GEMINI_API_KEY` | provider=gemini 时必填 | - | Gemini API Key |

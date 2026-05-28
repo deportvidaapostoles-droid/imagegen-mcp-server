@@ -45,6 +45,7 @@ npm run build
 | `IMAGEGEN_BLOCKING_POLL` | No | `false` | Block get_task to prevent rapid polling |
 | `IMAGEGEN_BLOCKING_POLL_TIMEOUT` | No | `120` | Blocking poll timeout in seconds |
 | `IMAGEGEN_MAX_RETRIES` | No | `3` | Max retries on task failure |
+| `IMAGEGEN_TASK_TIMEOUT` | No | `600` | Async task timeout in seconds |
 | `OPENAI_API_KEY` | When provider=openai | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | No | - | OpenAI API proxy URL |
 | `GEMINI_API_KEY` | When provider=gemini | - | Gemini API Key |
@@ -209,6 +210,8 @@ The recommended workflow for slow image generation:
 **Why async?** Image generation can take 30-120+ seconds. The async pattern prevents MCP client timeouts by decoupling submission from result retrieval.
 
 **Retry on failure:** Failed tasks are automatically retried up to `IMAGEGEN_MAX_RETRIES` times (default: 3) with exponential backoff (2s, 4s, 8s...). The final error message includes the last failure reason.
+
+**Task timeout:** Each task attempt has a maximum duration of `IMAGEGEN_TASK_TIMEOUT` seconds (default: 600). If the upstream API doesn't respond within this time, the attempt is considered failed and will be retried.
 
 ### Blocking Poll Mode
 
