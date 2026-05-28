@@ -503,7 +503,7 @@ function handleGetTask(args: Record<string, unknown>): { content: (TextContent |
           text: JSON.stringify({
             task_id: taskId,
             status: finalTask.status,
-            message: "Task is still processing after 120s. Check again later.",
+            message: `Task is still processing after ${BLOCKING_POLL_TIMEOUT / 1000}s. Check again later.`,
           }, null, 2),
         },
       ],
