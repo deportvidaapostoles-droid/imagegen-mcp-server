@@ -44,6 +44,7 @@ npm run build
 | `IMAGEGEN_ASYNC_ONLY` | 否 | `false` | 只暴露异步任务工具 |
 | `IMAGEGEN_BLOCKING_POLL` | 否 | `false` | get_task 阻塞等待避免频繁轮询 |
 | `IMAGEGEN_BLOCKING_POLL_TIMEOUT` | 否 | `120` | 阻塞轮询超时秒数 |
+| `IMAGEGEN_MAX_RETRIES` | 否 | `3` | 任务失败最大重试次数 |
 | `OPENAI_API_KEY` | provider=openai 时必填 | - | OpenAI API Key |
 | `OPENAI_BASE_URL` | 否 | - | OpenAI API 代理地址 |
 | `GEMINI_API_KEY` | provider=gemini 时必填 | - | Gemini API Key |
@@ -206,6 +207,8 @@ IMAGEGEN_ASYNC_ONLY=true npx -y github:ptbsare/imagegen-mcp-server
 ```
 
 **为什么用异步？** 图片生成可能需要 30-120+ 秒。异步模式通过解耦提交和结果获取，避免 MCP 客户端超时。
+
+**失败重试：** 任务失败时会自动重试，最多 `IMAGEGEN_MAX_RETRIES` 次（默认 3 次），采用指数退避策略（2s、4s、8s...）。最终错误信息包含最后一次失败原因。
 
 ### 阻塞轮询模式
 

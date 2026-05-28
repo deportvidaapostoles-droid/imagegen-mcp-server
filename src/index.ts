@@ -100,6 +100,7 @@ const SYNC_TOOLS = createTools(PROVIDER, DEFAULT_TIMEOUT);
 const TOOLS = runtimeConfig.asyncOnly ? ASYNC_TOOLS : [...ASYNC_TOOLS, ...SYNC_TOOLS];
 const BLOCKING_POLL = runtimeConfig.blockingPoll;
 const BLOCKING_POLL_TIMEOUT = runtimeConfig.blockingPollTimeout * 1000;
+const MAX_RETRIES = runtimeConfig.maxRetries;
 
 // ─── Server ─────────────────────────────────────────────────────────────────
 
@@ -276,93 +277,102 @@ async function processTask(task: Task): Promise<void> {
   task.status = "processing";
   task.updatedAt = Date.now();
 
-  try {
-    let images: string[] = [];
+  let lastError: string | undefined;
 
-    if (PROVIDER === "openai") {
-      if (!openaiClient) throw new Error("OpenAI client not initialized");
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      let images: string[] = [];
 
-      if (task.kind === "generate") {
-        const isGptImageModel = MODEL.startsWith("gpt-image");
-        const response = await openaiClient.images.generate({
-          model: MODEL,
-          prompt: task.prompt,
-          n: 1,
-          size: "auto" as any,
-          response_format: "b64_json",
-        });
-        if (response.data) {
-          for (const img of response.data) {
-            const data = await openAIImageToBase64(img);
-            if (data) images.push(data.data);
+      if (PROVIDER === "openai") {
+        if (!openaiClient) throw new Error("OpenAI client not initialized");
+
+        if (task.kind === "generate") {
+          const isGptImageModel = MODEL.startsWith("gpt-image");
+          const response = await openaiClient.images.generate({
+            model: MODEL,
+            prompt: task.prompt,
+            n: 1,
+            size: "auto" as any,
+            response_format: "b64_json",
+          });
+          if (response.data) {
+            for (const img of response.data) {
+              const data = await openAIImageToBase64(img);
+              if (data) images.push(data.data);
+            }
+          }
+        } else {
+          const { toFile } = await import("openai");
+          const imageFiles = await Promise.all(
+            task.images.map(async (b64, i) =>
+              toFile(Buffer.from(b64, "base64"), `input_${i}.png`, { type: "image/png" })
+            )
+          );
+          const result = await openaiClient.images.edit({
+            image: imageFiles,
+            prompt: task.prompt,
+            model: MODEL,
+            response_format: "b64_json",
+          });
+          if (result.data) {
+            for (const img of result.data) {
+              const data = await openAIImageToBase64(img);
+              if (data) images.push(data.data);
+            }
           }
         }
       } else {
-        // edit: task.images contain input images, task.prompt is the edit prompt
-        const { toFile } = await import("openai");
-        const imageFiles = await Promise.all(
-          task.images.map(async (b64, i) =>
-            toFile(Buffer.from(b64, "base64"), `input_${i}.png`, { type: "image/png" })
-          )
-        );
-        const result = await openaiClient.images.edit({
-          image: imageFiles,
-          prompt: task.prompt,
-          model: MODEL,
-          response_format: "b64_json",
-        });
-        if (result.data) {
-          for (const img of result.data) {
-            const data = await openAIImageToBase64(img);
-            if (data) images.push(data.data);
+        if (!geminiClient) throw new Error("Gemini client not initialized");
+
+        const contents: any[] = [];
+        if (task.kind === "edit" && task.images.length > 0) {
+          for (const b64 of task.images) {
+            contents.push({ inlineData: { mimeType: "image/png", data: b64 } });
           }
         }
-      }
-    } else {
-      // Gemini
-      if (!geminiClient) throw new Error("Gemini client not initialized");
+        contents.push({ text: task.prompt });
 
-      const contents: any[] = [];
+        const result = await geminiClient.models.generateContent({
+          model: MODEL,
+          contents,
+        });
 
-      if (task.kind === "edit" && task.images.length > 0) {
-        for (const b64 of task.images) {
-          contents.push({ inlineData: { mimeType: "image/png", data: b64 } });
-        }
-      }
-
-      contents.push({ text: task.prompt });
-
-      const result = await geminiClient.models.generateContent({
-        model: MODEL,
-        contents,
-      });
-
-      const candidates = result.candidates;
-      if (candidates) {
-        for (const candidate of candidates) {
-          if (candidate.content?.parts) {
-            for (const part of candidate.content.parts) {
-              if (part.inlineData?.data) {
-                images.push(part.inlineData.data);
+        const candidates = result.candidates;
+        if (candidates) {
+          for (const candidate of candidates) {
+            if (candidate.content?.parts) {
+              for (const part of candidate.content.parts) {
+                if (part.inlineData?.data) {
+                  images.push(part.inlineData.data);
+                }
               }
             }
           }
         }
       }
-    }
 
-    if (images.length === 0) {
-      throw new Error("No images were generated");
-    }
+      if (images.length === 0) {
+        throw new Error("No images were generated");
+      }
 
-    task.images = images;
-    task.mimeType = "image/png";
-    task.status = "completed";
-  } catch (error) {
-    task.status = "failed";
-    task.error = formatErrorMessage(error);
+      task.images = images;
+      task.mimeType = "image/png";
+      task.status = "completed";
+      task.updatedAt = Date.now();
+      return;
+    } catch (error) {
+      lastError = formatErrorMessage(error);
+      logRuntime(`Task ${task.id} attempt ${attempt}/${MAX_RETRIES} failed: ${lastError}`);
+      if (attempt < MAX_RETRIES) {
+        // Wait before retry: 2s, 4s, 8s...
+        const delay = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
+  task.status = "failed";
+  task.error = `Failed after ${MAX_RETRIES} attempts. Last error: ${lastError}`;
   task.updatedAt = Date.now();
 }
 
