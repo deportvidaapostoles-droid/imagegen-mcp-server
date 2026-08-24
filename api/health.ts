@@ -5,12 +5,14 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { getAuthConfig } from "../src/auth.js";
 import { getServerRuntimeConfig, loadDotEnv } from "../src/config.js";
 import { applyCorsHeaders, healthPayload, writeJson } from "../src/http-transport.js";
 
 loadDotEnv();
 
 const runtimeConfig = getServerRuntimeConfig([], process.env);
+const authConfig = getAuthConfig(process.env);
 
 export default function handler(req: IncomingMessage, res: ServerResponse): void {
   applyCorsHeaders(res);
@@ -20,5 +22,5 @@ export default function handler(req: IncomingMessage, res: ServerResponse): void
     return;
   }
 
-  writeJson(res, 200, healthPayload(runtimeConfig));
+  writeJson(res, 200, healthPayload(runtimeConfig, authConfig));
 }

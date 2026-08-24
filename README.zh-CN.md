@@ -15,6 +15,7 @@ AI 图片生成与编辑 MCP 服务器，支持 OpenAI 和 Google Gemini 双 Pro
 - **多图编辑**：OpenAI 和 Gemini 均支持多图输入
 - 支持三种 transport：stdio（默认）、Streamable HTTP（`/mcp`）、旧版 SSE
 - **可部署到 Vercel**：作为远程 MCP 服务器运行（serverless 函数，无常驻进程）
+- **可选认证**：共享密钥，或带白名单的 OAuth 2.1
 - 支持自定义 API 代理地址（`OPENAI_BASE_URL` / `GEMINI_BASE_URL`）
 - 支持 `.env` 自动加载，也支持通过 CLI 参数传配置
 
@@ -246,6 +247,7 @@ MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 2. 配置环境变量（Project Settings → Environment Variables）：
    `IMAGEGEN_PROVIDER`、`IMAGEGEN_MODEL` 以及 `OPENAI_API_KEY`（或 `GEMINI_API_KEY`）。
    可选：`OPENAI_BASE_URL` / `GEMINI_BASE_URL`、`IMAGEGEN_TIMEOUT`。
+   如需限制谁可以使用该部署，见[认证](#认证)。
 3. `git push` 即可自动部署。
 
 部署后的端点：
@@ -254,6 +256,8 @@ MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 |------|------|------|
 | `POST /mcp` | `api/mcp.ts` | MCP 端点（Streamable HTTP） |
 | `GET /health` | `api/health.ts` | 健康检查（`/api/health` 同样可用） |
+| `GET /.well-known/oauth-protected-resource` | `api/oauth-protected-resource.ts` | 启用认证时的 OAuth 元数据（RFC 9728） |
+| `GET /.well-known/oauth-authorization-server` | `api/oauth-authorization-server.ts` | 身份提供商发现文档的镜像 |
 | `GET /` | 静态 | 说明页（`web/index.html`） |
 
 客户端配置：
@@ -277,6 +281,101 @@ Serverless 注意事项：
   另一个实例。在 Vercel 上建议使用同步工具 `generate_image` / `edit_image`；异步工具主要面向
   stdio 与自托管 HTTP 部署。
 
+## 认证
+
+默认情况下 HTTP 端点是**开放的**——这对 stdio 或本地服务器没问题，但公开部署时不可接受：
+任何知道 URL 的人都能消耗你的 API 额度。有两种模式可以关闭它：
+
+| 模式 | 配置成本 | 适用场景 |
+|------|----------|----------|
+| `MCP_AUTH_MODE=token` | 一个环境变量，无需第三方 | 少数可信用户；适用于无法自定义请求头的客户端 |
+| `MCP_AUTH_MODE=oauth` | 需要身份提供商（Auth0、WorkOS、Okta、Entra ID 等） | 真实的按人登录，可撤销、可审计 |
+
+### 共享密钥模式
+
+设置 `MCP_AUTH_TOKENS`（逗号分隔，可为每个人签发一个便于单独吊销）与
+`MCP_AUTH_MODE=token`。用 `openssl rand -hex 32` 生成。调用方可以通过以下方式携带密钥：
+
+- `Authorization: Bearer <secret>`；
+- 查询参数 `?token=<secret>`；
+- URL 路径 `https://<deployment>/mcp/<secret>`——对于只能填 URL 的连接器，这是唯一选择。
+
+密钥比较为常量时间，且不返回 `WWW-Authenticate`，客户端不会去寻找并不存在的登录服务器。
+注意：URL 中的密钥会出现在浏览器历史、代理日志和平台访问日志中——比开放端点好得多，
+但弱于 OAuth。
+
+### OAuth 模式
+
+设置 `MCP_AUTH_MODE=oauth` 后，服务器会作为 OAuth 2.1 **资源服务器**运行：
+校验身份提供商签发的 bearer token，并对照白名单放行。
+
+服务器本身不签发 token，也不保存会话状态。它会：
+
+1. 对未认证请求返回 `401`，并在 `WWW-Authenticate` 中指向
+   `/.well-known/oauth-protected-resource/mcp`（RFC 9728）；
+2. 发布该元数据文档，客户端据此自动发现授权服务器；
+3. 用提供商的 JWKS 校验 JWT：签名、issuer、过期时间，以及 `audience`
+   （token 必须是**为本服务器**签发的，见 RFC 8707）；
+4. 对不在 `MCP_ALLOWED_EMAILS` / `MCP_ALLOWED_EMAIL_DOMAINS` /
+   `MCP_ALLOWED_SUBJECTS` 中的用户返回 `403`。
+
+### 变量
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `MCP_AUTH_MODE` | 是 | `token`、`oauth`，或 `none`（默认）保持开放 |
+| `MCP_AUTH_TOKENS` | token 模式 | 共享密钥列表，逗号分隔 |
+| `MCP_OAUTH_ISSUER` | oauth 模式 | 身份提供商的 issuer URL |
+| `MCP_OAUTH_AUDIENCE` | oauth 模式 | token 的目标资源标识，通常为 `https://<project>.vercel.app/mcp` |
+| `MCP_ALLOWED_EMAILS` | 建议 | 允许使用的邮箱列表，逗号分隔 |
+| `MCP_ALLOWED_EMAIL_DOMAINS` | 否 | 放行某个域名下所有已验证邮箱 |
+| `MCP_ALLOWED_SUBJECTS` | 否 | 按提供商用户 ID 放行（token 无 email claim 时） |
+| `MCP_EMAIL_CLAIM` | 否 | 邮箱所在的 claim（默认 `email`，带命名空间的按后缀匹配） |
+| `MCP_REQUIRED_SCOPES` | 否 | token 必须包含的 scope，如 `mcp:use` |
+| `MCP_OAUTH_JWKS_URI` | 否 | 跳过发现流程，直接指定 JWKS |
+| `MCP_PUBLIC_URL` | 否 | 代理改写 Host 时使用的规范公开 URL |
+
+若设置了 `MCP_AUTH_MODE=oauth` 却缺少 issuer 或 audience，服务器会**拒绝所有请求**
+（fail closed），而不是退化成无认证状态。
+
+### 示例：Auth0
+
+任何签发 JWT access token 的 OIDC 提供商均可。以 Auth0 为例：
+
+1. **APIs → Create API**，Identifier 填 `https://<your-project>.vercel.app/mcp`
+   （即 `MCP_OAUTH_AUDIENCE`）；需要 scope 的话添加 `mcp:use` 权限。
+2. **Applications → Create → Regular Web Application**，回调地址加入
+   `https://claude.ai/api/mcp/auth_callback`。若希望客户端自助注册，在
+   *Tenant Settings → Advanced* 打开动态客户端注册；否则把 Client ID/Secret
+   填进连接器的高级设置。
+3. 想按邮箱放行，就在 *Login* 流程加一个 **Action**，把邮箱写进 access token：
+
+   ```js
+   exports.onExecutePostLogin = async (event, api) => {
+     api.accessToken.setCustomClaim('https://imagegen/email', event.user.email);
+   };
+   ```
+
+   然后设置 `MCP_EMAIL_CLAIM=https://imagegen/email`（或保留默认值，改用
+   `MCP_ALLOWED_SUBJECTS` 配置 Auth0 用户 ID）。
+4. 在 Vercel 配置：
+
+   ```
+   MCP_AUTH_MODE=oauth
+   MCP_OAUTH_ISSUER=https://<tenant>.us.auth0.com
+   MCP_OAUTH_AUDIENCE=https://<your-project>.vercel.app/mcp
+   MCP_EMAIL_CLAIM=https://imagegen/email
+   MCP_ALLOWED_EMAILS=owner@example.com,manager@example.com
+   ```
+
+验证：
+
+```bash
+curl -i -X POST https://<your-project>.vercel.app/mcp   # -> 401 + WWW-Authenticate
+curl -s https://<your-project>.vercel.app/.well-known/oauth-protected-resource/mcp
+curl -s https://<your-project>.vercel.app/health        # -> "auth": "oauth"
+```
+
 ## 项目结构
 
 ```
@@ -287,8 +386,10 @@ src/task-store.ts      内存异步任务队列
 src/mcp-server.ts      MCP server 工厂：工具注册与分发
 src/http-transport.ts  Streamable HTTP 传输处理（无状态）+ 健康检查
 src/index.ts           CLI 入口（stdio / http / sse）
+src/auth.ts            OAuth bearer 校验 + 白名单 + 元数据
 api/mcp.ts             Vercel serverless 函数 -> /mcp
 api/health.ts          Vercel serverless 函数 -> /health
+api/oauth-*.ts         Vercel serverless 函数 -> /.well-known/oauth-*
 web/index.html         静态说明页（Vercel 输出目录）
 ```
 

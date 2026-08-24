@@ -14,12 +14,21 @@
 import { createServer } from "node:http";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { getAuthConfig } from "./auth.js";
 import { getCliHelpText, getServerRuntimeConfig, loadDotEnv } from "./config.js";
-import { applyCorsHeaders, handleMcpRequest, healthPayload, writeJson } from "./http-transport.js";
+import {
+  applyCorsHeaders,
+  handleAuthorizationServerMetadata,
+  handleMcpRequest,
+  handleProtectedResourceMetadata,
+  healthPayload,
+  writeJson,
+} from "./http-transport.js";
 import { createMcpServer } from "./mcp-server.js";
 
 loadDotEnv();
 const runtimeConfig = getServerRuntimeConfig();
+const authConfig = getAuthConfig();
 
 if (runtimeConfig.helpRequested) {
   process.stderr.write(getCliHelpText() + "\n");
@@ -36,7 +45,9 @@ function logRuntime(...args: unknown[]): void {
 }
 
 async function main(): Promise<void> {
-  runtimeConfig.warnings.forEach((warning) => logRuntime(`Config warning: ${warning}`));
+  [...runtimeConfig.warnings, ...authConfig.warnings].forEach((warning) =>
+    logRuntime(`Config warning: ${warning}`)
+  );
 
   const { provider, model, transportMode, host, port } = runtimeConfig;
 
@@ -58,8 +69,23 @@ async function main(): Promise<void> {
     void (async () => {
       const url = new URL(req.url || "/", `http://${req.headers.host ?? "localhost"}`);
 
-      if (url.pathname === "/mcp" || url.pathname === "/api/mcp") {
-        await handleMcpRequest(req, res, runtimeConfig, { log: logRuntime });
+      if (
+        url.pathname === "/mcp" ||
+        url.pathname === "/api/mcp" ||
+        url.pathname.startsWith("/mcp/") ||
+        url.pathname.startsWith("/api/mcp/")
+      ) {
+        await handleMcpRequest(req, res, runtimeConfig, { log: logRuntime, auth: authConfig });
+        return;
+      }
+
+      if (url.pathname.startsWith("/.well-known/oauth-protected-resource")) {
+        handleProtectedResourceMetadata(req, res, authConfig);
+        return;
+      }
+
+      if (url.pathname.startsWith("/.well-known/oauth-authorization-server")) {
+        await handleAuthorizationServerMetadata(req, res, authConfig);
         return;
       }
 
@@ -74,7 +100,7 @@ async function main(): Promise<void> {
         (url.pathname === "/health" || url.pathname === "/api/health" || url.pathname === "/") &&
         req.method === "GET"
       ) {
-        writeJson(res, 200, healthPayload(runtimeConfig));
+        writeJson(res, 200, healthPayload(runtimeConfig, authConfig));
         return;
       }
 
@@ -123,6 +149,15 @@ async function main(): Promise<void> {
     );
     logRuntime(`  MCP endpoint:    http://${host}:${port}/mcp`);
     logRuntime(`  Health endpoint: http://${host}:${port}/health`);
+    logRuntime(
+      `  Authentication:  ${
+        authConfig.mode === "oauth"
+          ? "OAuth bearer tokens"
+          : authConfig.mode === "token"
+            ? `shared secret (${authConfig.tokens.length} token(s))`
+            : "disabled"
+      }`
+    );
     if (transportMode === "sse") {
       logRuntime(`  Legacy SSE:      http://${host}:${port}/sse`);
     }
