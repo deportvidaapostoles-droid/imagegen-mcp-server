@@ -1,6 +1,6 @@
 {
   "name": "imagegen-mcp-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for AI image generation and editing, supports OpenAI and Google Gemini",
   "type": "module",
   "main": "dist/index.js",
@@ -9,8 +9,11 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.api.json",
     "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "start:http": "MCP_TRANSPORT=http node dist/index.js",
+    "prepublishOnly": "npm run build",
     "models": "npx tsx src/list-models.ts",
     "models:openai": "npx tsx src/list-openai-models.ts",
     "test:openai-proxy": "npx tsx src/test-openai-proxy.ts",
@@ -21,10 +24,13 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "image-generation",
     "openai",
     "gemini",
-    "dalle"
+    "dalle",
+    "vercel",
+    "serverless"
   ],
   "author": "",
   "license": "MIT",
@@ -42,7 +48,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.42.0",
-    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "dotenv": "^17.2.3",
     "openai": "^4.77.3"
   },
@@ -53,6 +59,11 @@
     "vitest": "^4.0.18"
   },
   "engines": {
-    "node": ">=18"
-  }
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ]
 }

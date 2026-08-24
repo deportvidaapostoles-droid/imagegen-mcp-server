@@ -1,4 +1,14 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "web",
+  "rewrites": [
+    { "source": "/mcp", "destination": "/api/mcp" },
+    { "source": "/health", "destination": "/api/health" }
+  ],
+  "functions": {
+    "api/mcp.ts": { "maxDuration": 60 },
+    "api/health.ts": { "maxDuration": 10 }
+  }
 }

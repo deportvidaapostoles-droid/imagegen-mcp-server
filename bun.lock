@@ -6,7 +6,7 @@
       "name": "imagegen-mcp-server",
       "dependencies": {
         "@google/genai": "^1.42.0",
-        "@modelcontextprotocol/sdk": "^1.0.4",
+        "@modelcontextprotocol/sdk": "^1.25.3",
         "dotenv": "^17.2.3",
         "openai": "^4.77.3",
       },

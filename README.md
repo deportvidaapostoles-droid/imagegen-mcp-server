@@ -13,7 +13,8 @@ An MCP server for AI image generation and editing with dual-provider support for
 - **Model set** via `IMAGEGEN_MODEL` env var — no model parameter in tool calls
 - **Always returns base64 MCP ImageContent** — no temp files saved locally
 - **Multi-image editing** supported for both OpenAI and Gemini
-- Three transports: stdio (default), SSE, HTTP
+- Three transports: stdio (default), Streamable HTTP (`/mcp`), legacy SSE
+- **Deployable to Vercel** as a remote MCP server (serverless functions, no persistent process)
 - Custom API proxy endpoints (`OPENAI_BASE_URL` / `GEMINI_BASE_URL`)
 - Auto-loads `.env`, also supports CLI arguments
 
@@ -222,18 +223,88 @@ Set `IMAGEGEN_BLOCKING_POLL=true` to make `get_task` block for up to 120 seconds
 - **OpenAI / OpenAI-compatible**: `gpt-image-1`, `gpt-image-2`, `dall-e-3`, `dall-e-2`, `doubao-*`, `volcengine/doubao-*`
 - **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-*`
 
-## SSE / HTTP Mode
+## Remote HTTP transport
+
+The server implements the MCP **Streamable HTTP** transport on `/mcp` (stateless mode: one
+server instance per request, no session state). Run it locally with:
+
+```bash
+MCP_TRANSPORT=http MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
+# MCP endpoint    -> http://localhost:3000/mcp
+# Health endpoint -> http://localhost:3000/health
+```
+
+The legacy HTTP+SSE transport (`/sse` + `/message`) is still available for older clients:
 
 ```bash
 MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 ```
 
+## Deploy to Vercel
+
+The repository is ready to deploy as-is — no dashboard build settings need to be changed:
+
+1. Import the repository in Vercel (framework preset: *Other*).
+2. Add the environment variables (Project Settings → Environment Variables):
+   `IMAGEGEN_PROVIDER`, `IMAGEGEN_MODEL` and `OPENAI_API_KEY` (or `GEMINI_API_KEY`).
+   Optional: `OPENAI_BASE_URL` / `GEMINI_BASE_URL`, `IMAGEGEN_TIMEOUT`.
+3. `git push` — every push deploys automatically.
+
+Resulting endpoints:
+
+| Route | Function | Description |
+|-------|----------|-------------|
+| `POST /mcp` | `api/mcp.ts` | MCP endpoint (Streamable HTTP) |
+| `GET /health` | `api/health.ts` | Health check (`/api/health` also works) |
+| `GET /` | static | Landing page (`web/index.html`) |
+
+Connect any modern MCP client:
+
+```json
+{
+  "mcpServers": {
+    "imagegen": {
+      "type": "http",
+      "url": "https://<your-project>.vercel.app/mcp"
+    }
+  }
+}
+```
+
+Serverless notes:
+
+- `vercel.json` sets `maxDuration: 60` for `/api/mcp`. Keep `IMAGEGEN_TIMEOUT` below that
+  (e.g. `55`) so the tool returns a proper MCP error instead of the platform killing the
+  request. Longer generations need a plan with a higher function duration limit.
+- `submit_task` / `get_task` keep their task state in the memory of a single instance, so a
+  follow-up `get_task` may land on a different instance. Prefer the synchronous
+  `generate_image` / `edit_image` tools on Vercel; the async tools remain intended for the
+  stdio and self-hosted HTTP deployments.
+
+## Project structure
+
+```
+src/config.ts          CLI/env configuration parsing
+src/tools.ts           MCP tool definitions (JSON schema)
+src/image-service.ts   Provider calls (OpenAI / Gemini) -> MCP content blocks
+src/task-store.ts      In-memory async task queue
+src/mcp-server.ts      MCP server factory: tool registration + dispatch
+src/http-transport.ts  Streamable HTTP transport handler (stateless) + health payload
+src/index.ts           CLI entry point (stdio / http / sse)
+api/mcp.ts             Vercel serverless function -> /mcp
+api/health.ts          Vercel serverless function -> /health
+web/index.html         Static landing page (Vercel output directory)
+```
+
 ## Development
 
 ```bash
-npm run build       # Compile
+npm run build       # Compile to dist/
+npm run typecheck   # Type-check src/ and api/
 npm run watch       # Watch mode
 npm test            # Unit tests
+npm start           # Run the compiled server on stdio
+npm run start:http  # Run the compiled server on http://localhost:3000/mcp
 ```
 
 ## Tech Stack
