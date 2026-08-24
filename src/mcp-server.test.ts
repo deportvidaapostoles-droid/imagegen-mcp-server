@@ -35,11 +35,22 @@ describe('createMcpServer', () => {
     expect(Object.keys(generate!.inputSchema.properties ?? {})).toContain('aspect_ratio');
   });
 
-  it('hides tools when no credentials are configured', async () => {
+  it('still advertises the tools when no credentials are configured', async () => {
     const { server } = createMcpServer(configWith({}));
     const handler = (server as any)._requestHandlers.get(ListToolsRequestSchema.shape.method.value);
     const result = await handler({ method: 'tools/list', params: {} }, { signal: new AbortController().signal });
-    expect(result.tools).toEqual([]);
+    expect(result.tools.map((tool: { name: string }) => tool.name)).toContain('generate_image');
+  });
+
+  it('explains the missing API key when a tool is called unconfigured', async () => {
+    const { server } = createMcpServer(configWith({}));
+    const handler = (server as any)._requestHandlers.get(CallToolRequestSchema.shape.method.value);
+    const result = await handler(
+      { method: 'tools/call', params: { name: 'generate_image', arguments: { prompt: 'a cat' } } },
+      { signal: new AbortController().signal }
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('OPENAI_API_KEY');
   });
 
   it('returns a structured error for an unknown tool', async () => {
