@@ -25,9 +25,10 @@ export function createMcpServer(config, options = {}) {
     const syncTools = createTools(config.provider, config.timeout);
     const tools = config.asyncOnly ? asyncTools : [...asyncTools, ...syncTools];
     const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} } });
-    server.setRequestHandler(ListToolsRequestSchema, async () => ({
-        tools: service.isConfigured ? tools : [],
-    }));
+    // The tools are always advertised, even without provider credentials: an
+    // empty list looks to a client like a broken server, while a call that
+    // explains the missing API key is actionable.
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name } = request.params;
         const args = (request.params.arguments ?? {});
