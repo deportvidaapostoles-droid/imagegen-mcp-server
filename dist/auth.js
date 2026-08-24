@@ -15,6 +15,7 @@
  *
  * Configuration is environment-only — it is a deployment concern, not a CLI one.
  */
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 export class AuthError extends Error {
     status;
@@ -47,14 +48,21 @@ export function getAuthConfig(env = process.env) {
     const rawMode = (env.MCP_AUTH_MODE ?? "none").trim().toLowerCase();
     const issuer = env.MCP_OAUTH_ISSUER?.trim();
     const audience = env.MCP_OAUTH_AUDIENCE?.trim();
+    const tokens = splitList(env.MCP_AUTH_TOKENS);
     let mode;
     if (rawMode === "oauth") {
         mode = "oauth";
+    }
+    else if (rawMode === "token") {
+        mode = "token";
     }
     else if (rawMode === "none" || rawMode === "") {
         mode = "none";
         if (issuer) {
             warnings.push("MCP_OAUTH_ISSUER is set but MCP_AUTH_MODE is not 'oauth' — the endpoint is UNAUTHENTICATED");
+        }
+        if (tokens.length > 0) {
+            warnings.push("MCP_AUTH_TOKENS is set but MCP_AUTH_MODE is not 'token' — the endpoint is UNAUTHENTICATED");
         }
     }
     else {
@@ -67,6 +75,9 @@ export function getAuthConfig(env = process.env) {
     // Fail closed: an OAuth deployment missing its issuer or audience must not
     // silently degrade into an open endpoint.
     let configError;
+    if (mode === "token" && tokens.length === 0) {
+        configError = "MCP_AUTH_MODE=token requires MCP_AUTH_TOKENS";
+    }
     if (mode === "oauth") {
         if (!issuer) {
             configError = "MCP_AUTH_MODE=oauth requires MCP_OAUTH_ISSUER";
@@ -83,6 +94,7 @@ export function getAuthConfig(env = process.env) {
     }
     return {
         mode,
+        tokens,
         issuer: issuer ? trimTrailingSlash(issuer) : undefined,
         audience,
         jwksUri: env.MCP_OAUTH_JWKS_URI?.trim() || undefined,
@@ -97,7 +109,58 @@ export function getAuthConfig(env = process.env) {
     };
 }
 export function isAuthEnabled(config) {
+    return config.mode !== "none";
+}
+/** True when the mode advertises an OAuth authorization server. */
+export function isOAuthMode(config) {
     return config.mode === "oauth";
+}
+// ─── Shared-secret mode ─────────────────────────────────────────────────────
+function secretsMatch(a, b) {
+    // Digest first so the comparison is constant time regardless of length.
+    const left = createHash("sha256").update(a).digest();
+    const right = createHash("sha256").update(b).digest();
+    return timingSafeEqual(left, right);
+}
+/**
+ * Read the shared secret of a request.
+ * Accepted, in order: the `Authorization: Bearer` header, a `token`/`key` query
+ * parameter, or the last path segment (`/mcp/<secret>`) — the only option for
+ * clients that cannot send custom headers.
+ */
+export function extractStaticSecret(headers, url, basePaths = ["/mcp", "/api/mcp"]) {
+    const bearer = extractBearerToken(headers);
+    if (bearer)
+        return bearer;
+    const fromQuery = url?.searchParams.get("token") ?? url?.searchParams.get("key");
+    if (fromQuery)
+        return fromQuery;
+    if (url) {
+        const path = url.pathname.replace(/\/+$/, "");
+        for (const base of basePaths) {
+            if (path.startsWith(`${base}/`)) {
+                const candidate = path.slice(base.length + 1);
+                if (candidate && !candidate.includes("/"))
+                    return decodeURIComponent(candidate);
+            }
+        }
+    }
+    return undefined;
+}
+/** Verify a request in `token` mode. Throws `AuthError` when it must be rejected. */
+export function authenticateStaticRequest(headers, url, config) {
+    if (config.configError) {
+        throw new AuthError(500, undefined, `Server authentication is misconfigured: ${config.configError}`);
+    }
+    const secret = extractStaticSecret(headers, url);
+    if (!secret) {
+        throw new AuthError(401, undefined, "Authentication required");
+    }
+    const index = config.tokens.findIndex((candidate) => secretsMatch(candidate, secret));
+    if (index < 0) {
+        throw new AuthError(401, "invalid_token", "Invalid access token");
+    }
+    return { token: secret, clientId: `static-token-${index + 1}`, scopes: [] };
 }
 const discoveryCache = new Map();
 const jwksCache = new Map();

@@ -15,7 +15,7 @@ AI 图片生成与编辑 MCP 服务器，支持 OpenAI 和 Google Gemini 双 Pro
 - **多图编辑**：OpenAI 和 Gemini 均支持多图输入
 - 支持三种 transport：stdio（默认）、Streamable HTTP（`/mcp`）、旧版 SSE
 - **可部署到 Vercel**：作为远程 MCP 服务器运行（serverless 函数，无常驻进程）
-- **可选的 OAuth 2.1 认证**：通过白名单限定谁可以使用服务器
+- **可选认证**：共享密钥，或带白名单的 OAuth 2.1
 - 支持自定义 API 代理地址（`OPENAI_BASE_URL` / `GEMINI_BASE_URL`）
 - 支持 `.env` 自动加载，也支持通过 CLI 参数传配置
 
@@ -284,8 +284,30 @@ Serverless 注意事项：
 ## 认证
 
 默认情况下 HTTP 端点是**开放的**——这对 stdio 或本地服务器没问题，但公开部署时不可接受：
-任何知道 URL 的人都能消耗你的 API 额度。设置 `MCP_AUTH_MODE=oauth` 后，服务器会作为
-OAuth 2.1 **资源服务器**运行：校验身份提供商签发的 bearer token，并对照白名单放行。
+任何知道 URL 的人都能消耗你的 API 额度。有两种模式可以关闭它：
+
+| 模式 | 配置成本 | 适用场景 |
+|------|----------|----------|
+| `MCP_AUTH_MODE=token` | 一个环境变量，无需第三方 | 少数可信用户；适用于无法自定义请求头的客户端 |
+| `MCP_AUTH_MODE=oauth` | 需要身份提供商（Auth0、WorkOS、Okta、Entra ID 等） | 真实的按人登录，可撤销、可审计 |
+
+### 共享密钥模式
+
+设置 `MCP_AUTH_TOKENS`（逗号分隔，可为每个人签发一个便于单独吊销）与
+`MCP_AUTH_MODE=token`。用 `openssl rand -hex 32` 生成。调用方可以通过以下方式携带密钥：
+
+- `Authorization: Bearer <secret>`；
+- 查询参数 `?token=<secret>`；
+- URL 路径 `https://<deployment>/mcp/<secret>`——对于只能填 URL 的连接器，这是唯一选择。
+
+密钥比较为常量时间，且不返回 `WWW-Authenticate`，客户端不会去寻找并不存在的登录服务器。
+注意：URL 中的密钥会出现在浏览器历史、代理日志和平台访问日志中——比开放端点好得多，
+但弱于 OAuth。
+
+### OAuth 模式
+
+设置 `MCP_AUTH_MODE=oauth` 后，服务器会作为 OAuth 2.1 **资源服务器**运行：
+校验身份提供商签发的 bearer token，并对照白名单放行。
 
 服务器本身不签发 token，也不保存会话状态。它会：
 
@@ -301,7 +323,8 @@ OAuth 2.1 **资源服务器**运行：校验身份提供商签发的 bearer toke
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `MCP_AUTH_MODE` | 是 | `oauth` 启用认证，`none`（默认）为开放端点 |
+| `MCP_AUTH_MODE` | 是 | `token`、`oauth`，或 `none`（默认）保持开放 |
+| `MCP_AUTH_TOKENS` | token 模式 | 共享密钥列表，逗号分隔 |
 | `MCP_OAUTH_ISSUER` | oauth 模式 | 身份提供商的 issuer URL |
 | `MCP_OAUTH_AUDIENCE` | oauth 模式 | token 的目标资源标识，通常为 `https://<project>.vercel.app/mcp` |
 | `MCP_ALLOWED_EMAILS` | 建议 | 允许使用的邮箱列表，逗号分隔 |

@@ -4,6 +4,8 @@ import { SignJWT, exportJWK, generateKeyPair, type JWK, type KeyLike } from 'jos
 import {
   AuthError,
   authenticateRequest,
+  authenticateStaticRequest,
+  extractStaticSecret,
   buildChallenge,
   extractBearerToken,
   getAuthConfig,
@@ -33,6 +35,7 @@ async function sign(claims: Record<string, unknown>, overrides: { audience?: str
 function config(overrides: Partial<AuthConfig> = {}): AuthConfig {
   return {
     mode: 'oauth',
+    tokens: [],
     issuer: ISSUER,
     audience: AUDIENCE,
     jwksUri,
@@ -218,5 +221,62 @@ describe('discovery documents', () => {
     const challenge = buildChallenge('https://x/.well-known/oauth-protected-resource/mcp', new AuthError(401, 'invalid_token', 'expired'));
     expect(challenge).toContain('resource_metadata="https://x/.well-known/oauth-protected-resource/mcp"');
     expect(challenge).toContain('error="invalid_token"');
+  });
+});
+
+describe('shared-secret mode', () => {
+  const secretConfig = (overrides: Partial<AuthConfig> = {}): AuthConfig =>
+    config({ mode: 'token', tokens: ['s3cret-uno', 's3cret-dos'], issuer: undefined, audience: undefined, ...overrides });
+
+  const url = (path: string) => new URL(path, 'https://imagegen.example.com');
+
+  it('requires MCP_AUTH_TOKENS when the mode is token', () => {
+    const parsed = getAuthConfig({ MCP_AUTH_MODE: 'token' } as NodeJS.ProcessEnv);
+    expect(parsed.configError).toContain('MCP_AUTH_TOKENS');
+  });
+
+  it('parses the token list', () => {
+    const parsed = getAuthConfig({ MCP_AUTH_MODE: 'token', MCP_AUTH_TOKENS: 'a1, b2' } as NodeJS.ProcessEnv);
+    expect(parsed.mode).toBe('token');
+    expect(parsed.tokens).toEqual(['a1', 'b2']);
+    expect(parsed.configError).toBeUndefined();
+  });
+
+  it('warns when tokens are set but the mode is none', () => {
+    const parsed = getAuthConfig({ MCP_AUTH_TOKENS: 'a1' } as NodeJS.ProcessEnv);
+    expect(parsed.warnings.join(' ')).toContain('UNAUTHENTICATED');
+  });
+
+  it('reads the secret from the Authorization header', () => {
+    expect(extractStaticSecret({ authorization: 'Bearer s3cret-uno' }, url('/mcp'))).toBe('s3cret-uno');
+  });
+
+  it('reads the secret from the path, for clients that cannot send headers', () => {
+    expect(extractStaticSecret({}, url('/mcp/s3cret-uno'))).toBe('s3cret-uno');
+    expect(extractStaticSecret({}, url('/api/mcp/s3cret-uno'))).toBe('s3cret-uno');
+  });
+
+  it('reads the secret from the query string', () => {
+    expect(extractStaticSecret({}, url('/mcp?token=s3cret-uno'))).toBe('s3cret-uno');
+    expect(extractStaticSecret({}, url('/mcp?key=s3cret-uno'))).toBe('s3cret-uno');
+  });
+
+  it('accepts any configured token and reports which one was used', () => {
+    expect(authenticateStaticRequest({}, url('/mcp/s3cret-dos'), secretConfig()).clientId).toBe('static-token-2');
+    expect(
+      authenticateStaticRequest({ authorization: 'Bearer s3cret-uno' }, url('/mcp'), secretConfig()).clientId
+    ).toBe('static-token-1');
+  });
+
+  it('rejects a missing or wrong secret', () => {
+    expect(() => authenticateStaticRequest({}, url('/mcp'), secretConfig())).toThrow(AuthError);
+    expect(() => authenticateStaticRequest({}, url('/mcp/nope'), secretConfig())).toThrow(AuthError);
+    expect(() => authenticateStaticRequest({}, url('/mcp/s3cret-uno/extra'), secretConfig())).toThrow(AuthError);
+  });
+
+  it('refuses every request when no token is configured', () => {
+    expect(() =>
+      authenticateStaticRequest({ authorization: 'Bearer x' }, url('/mcp'), secretConfig({ tokens: [], configError: 'missing tokens' }))
+    ).toThrow(/misconfigured/);
   });
 });

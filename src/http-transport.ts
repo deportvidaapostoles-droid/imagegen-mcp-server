@@ -14,9 +14,11 @@ import type { ServerRuntimeConfig } from "./config.js";
 import {
   AuthError,
   authenticateRequest,
+  authenticateStaticRequest,
   buildChallenge,
   fetchDiscoveryDocument,
   isAuthEnabled,
+  isOAuthMode,
   protectedResourceMetadata,
   protectedResourceMetadataUrl,
   type AuthConfig,
@@ -127,8 +129,11 @@ export async function handleMcpRequest(
   const authConfig = options.auth;
   let authInfo;
   if (authConfig && isAuthEnabled(authConfig)) {
+    const baseUrl = resolveBaseUrl(req, authConfig);
     try {
-      authInfo = await authenticateRequest(req.headers, authConfig);
+      authInfo = isOAuthMode(authConfig)
+        ? await authenticateRequest(req.headers, authConfig)
+        : authenticateStaticRequest(req.headers, new URL(req.url ?? "/", baseUrl), authConfig);
     } catch (error) {
       const authError =
         error instanceof AuthError
@@ -137,14 +142,21 @@ export async function handleMcpRequest(
       if (authError.status >= 500) {
         log("Authentication misconfigured:", authError.description);
       }
-      const metadataUrl = protectedResourceMetadataUrl(resolveBaseUrl(req, authConfig));
-      if (authError.status === 401) {
-        res.setHeader("WWW-Authenticate", buildChallenge(metadataUrl, authError));
+      // Only OAuth mode advertises a login: a `WWW-Authenticate` header in
+      // shared-secret mode would send clients hunting for an authorization
+      // server that does not exist.
+      if (isOAuthMode(authConfig)) {
+        const metadataUrl = protectedResourceMetadataUrl(baseUrl);
+        if (authError.status === 401) {
+          res.setHeader("WWW-Authenticate", buildChallenge(metadataUrl, authError));
+        }
+        writeJson(res, authError.status, {
+          ...jsonRpcError(-32001, authError.description),
+          error_uri: metadataUrl,
+        });
+      } else {
+        writeJson(res, authError.status, jsonRpcError(-32001, authError.description));
       }
-      writeJson(res, authError.status, {
-        ...jsonRpcError(-32001, authError.description),
-        error_uri: metadataUrl,
-      });
       return;
     }
   }
@@ -216,7 +228,7 @@ export function handleProtectedResourceMetadata(
     res.writeHead(204).end();
     return;
   }
-  if (!isAuthEnabled(authConfig)) {
+  if (!isOAuthMode(authConfig)) {
     // No authorization server to advertise: RFC 9728 clients read a 404 as
     // "this resource is not protected".
     writeJson(res, 404, { error: "not_found", error_description: "This server does not require authentication" });
@@ -241,7 +253,7 @@ export async function handleAuthorizationServerMetadata(
     res.writeHead(204).end();
     return;
   }
-  if (!isAuthEnabled(authConfig) || !authConfig.issuer) {
+  if (!isOAuthMode(authConfig) || !authConfig.issuer) {
     writeJson(res, 404, { error: "not_found", error_description: "This server does not require authentication" });
     return;
   }
@@ -278,11 +290,7 @@ export function healthPayload(
       : {}),
     ...(authConfig
       ? {
-          auth: authConfig.configError
-            ? "misconfigured"
-            : isAuthEnabled(authConfig)
-              ? "oauth"
-              : "disabled",
+          auth: authConfig.configError ? "misconfigured" : isAuthEnabled(authConfig) ? authConfig.mode : "disabled",
         }
       : {}),
     timestamp: new Date().toISOString(),

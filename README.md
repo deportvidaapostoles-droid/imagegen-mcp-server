@@ -15,7 +15,7 @@ An MCP server for AI image generation and editing with dual-provider support for
 - **Multi-image editing** supported for both OpenAI and Gemini
 - Three transports: stdio (default), Streamable HTTP (`/mcp`), legacy SSE
 - **Deployable to Vercel** as a remote MCP server (serverless functions, no persistent process)
-- **Optional OAuth 2.1 authentication** with an allow-list of who may use the server
+- **Optional authentication**: a shared secret, or OAuth 2.1 with an allow-list of who may use the server
 - Custom API proxy endpoints (`OPENAI_BASE_URL` / `GEMINI_BASE_URL`)
 - Auto-loads `.env`, also supports CLI arguments
 
@@ -289,9 +289,34 @@ Serverless notes:
 
 By default the HTTP endpoint is **open**, which is fine for stdio or a local
 server but not for a public deployment: anyone who learns the URL can spend your
-provider credits. Set `MCP_AUTH_MODE=oauth` and the server becomes an OAuth 2.1
-*resource server*: it verifies bearer tokens issued by your identity provider
-and checks the caller against an allow-list.
+provider credits. Two modes close it:
+
+| Mode | Setup | Good for |
+|------|-------|----------|
+| `MCP_AUTH_MODE=token` | One env var, no third party | A handful of trusted people; works with clients that cannot send custom headers |
+| `MCP_AUTH_MODE=oauth` | An identity provider (Auth0, WorkOS, Okta, Entra ID…) | Real per-person logins, revocable, auditable |
+
+### Shared-secret mode
+
+Set `MCP_AUTH_TOKENS` to one or more secrets (comma-separated — issue one per
+person so you can revoke them individually) and `MCP_AUTH_MODE=token`. Generate
+them with `openssl rand -hex 32`. A caller may present the secret as:
+
+- `Authorization: Bearer <secret>`,
+- `?token=<secret>` in the query string, or
+- the URL path: `https://<deployment>/mcp/<secret>` — the only option for
+  clients whose connector UI takes a URL and nothing else.
+
+The secret is compared in constant time, and no `WWW-Authenticate` header is
+sent, so clients do not go looking for a login server that does not exist. Keep
+in mind that a secret in a URL travels through browser history, proxy logs and
+platform access logs: it is far better than an open endpoint, weaker than OAuth.
+
+### OAuth mode
+
+`MCP_AUTH_MODE=oauth` turns the server into an OAuth 2.1 *resource server*: it
+verifies bearer tokens issued by your identity provider and checks the caller
+against an allow-list.
 
 The server never issues tokens and keeps no session state. It:
 
@@ -309,7 +334,8 @@ The server never issues tokens and keeps no session state. It:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `MCP_AUTH_MODE` | yes | `oauth` to enforce authentication, `none` (default) to leave the endpoint open |
+| `MCP_AUTH_MODE` | yes | `token`, `oauth`, or `none` (default) to leave the endpoint open |
+| `MCP_AUTH_TOKENS` | with `token` | Comma-separated shared secrets |
 | `MCP_OAUTH_ISSUER` | with `oauth` | Issuer URL of the identity provider |
 | `MCP_OAUTH_AUDIENCE` | with `oauth` | Resource identifier the token must target — normally `https://<project>.vercel.app/mcp` |
 | `MCP_ALLOWED_EMAILS` | recommended | Comma-separated list of the people allowed in |

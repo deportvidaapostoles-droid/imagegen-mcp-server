@@ -69,7 +69,12 @@ async function main(): Promise<void> {
     void (async () => {
       const url = new URL(req.url || "/", `http://${req.headers.host ?? "localhost"}`);
 
-      if (url.pathname === "/mcp" || url.pathname === "/api/mcp") {
+      if (
+        url.pathname === "/mcp" ||
+        url.pathname === "/api/mcp" ||
+        url.pathname.startsWith("/mcp/") ||
+        url.pathname.startsWith("/api/mcp/")
+      ) {
         await handleMcpRequest(req, res, runtimeConfig, { log: logRuntime, auth: authConfig });
         return;
       }
@@ -144,7 +149,15 @@ async function main(): Promise<void> {
     );
     logRuntime(`  MCP endpoint:    http://${host}:${port}/mcp`);
     logRuntime(`  Health endpoint: http://${host}:${port}/health`);
-    logRuntime(`  Authentication:  ${authConfig.mode === "oauth" ? "OAuth bearer tokens" : "disabled"}`);
+    logRuntime(
+      `  Authentication:  ${
+        authConfig.mode === "oauth"
+          ? "OAuth bearer tokens"
+          : authConfig.mode === "token"
+            ? `shared secret (${authConfig.tokens.length} token(s))`
+            : "disabled"
+      }`
+    );
     if (transportMode === "sse") {
       logRuntime(`  Legacy SSE:      http://${host}:${port}/sse`);
     }
