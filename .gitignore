@@ -11,3 +11,6 @@ coverage/
 .serena/
 .sisyphus/
 nul
+
+# Vercel
+.vercel

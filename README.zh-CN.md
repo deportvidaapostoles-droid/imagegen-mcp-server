@@ -13,7 +13,8 @@ AI 图片生成与编辑 MCP 服务器，支持 OpenAI 和 Google Gemini 双 Pro
 - **模型通过环境变量 `IMAGEGEN_MODEL` 指定**，工具调用无需传 model 参数
 - **统一返回 base64 MCP ImageContent**，不保存临时文件
 - **多图编辑**：OpenAI 和 Gemini 均支持多图输入
-- 支持三种 transport：stdio（默认）、SSE、HTTP
+- 支持三种 transport：stdio（默认）、Streamable HTTP（`/mcp`）、旧版 SSE
+- **可部署到 Vercel**：作为远程 MCP 服务器运行（serverless 函数，无常驻进程）
 - 支持自定义 API 代理地址（`OPENAI_BASE_URL` / `GEMINI_BASE_URL`）
 - 支持 `.env` 自动加载，也支持通过 CLI 参数传配置
 
@@ -220,18 +221,86 @@ IMAGEGEN_ASYNC_ONLY=true npx -y github:ptbsare/imagegen-mcp-server
 - **OpenAI / OpenAI-compatible**: `gpt-image-1`, `gpt-image-2`, `dall-e-3`, `dall-e-2`, `doubao-*`, `volcengine/doubao-*`
 - **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-*`
 
-## SSE / HTTP 模式
+## 远程 HTTP 传输
+
+服务器在 `/mcp` 上实现了 MCP **Streamable HTTP** 传输（无状态模式：每个请求创建一个独立的
+server 实例，不保存会话状态）。本地运行：
+
+```bash
+MCP_TRANSPORT=http MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
+# MCP 端点   -> http://localhost:3000/mcp
+# 健康检查   -> http://localhost:3000/health
+```
+
+旧版 HTTP+SSE 传输（`/sse` + `/message`）仍然保留，供旧客户端使用：
 
 ```bash
 MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 ```
 
+## 部署到 Vercel
+
+仓库已经配置完毕，无需在 Vercel 面板中修改构建设置：
+
+1. 在 Vercel 中导入该仓库（框架预设选择 *Other*）。
+2. 配置环境变量（Project Settings → Environment Variables）：
+   `IMAGEGEN_PROVIDER`、`IMAGEGEN_MODEL` 以及 `OPENAI_API_KEY`（或 `GEMINI_API_KEY`）。
+   可选：`OPENAI_BASE_URL` / `GEMINI_BASE_URL`、`IMAGEGEN_TIMEOUT`。
+3. `git push` 即可自动部署。
+
+部署后的端点：
+
+| 路由 | 函数 | 说明 |
+|------|------|------|
+| `POST /mcp` | `api/mcp.ts` | MCP 端点（Streamable HTTP） |
+| `GET /health` | `api/health.ts` | 健康检查（`/api/health` 同样可用） |
+| `GET /` | 静态 | 说明页（`web/index.html`） |
+
+客户端配置：
+
+```json
+{
+  "mcpServers": {
+    "imagegen": {
+      "type": "http",
+      "url": "https://<your-project>.vercel.app/mcp"
+    }
+  }
+}
+```
+
+Serverless 注意事项：
+
+- `vercel.json` 中 `/api/mcp` 的 `maxDuration` 为 60 秒，请将 `IMAGEGEN_TIMEOUT` 设置为更小的
+  值（如 `55`），这样超时会返回标准的 MCP 错误而不是被平台直接中断。
+- `submit_task` / `get_task` 的任务状态保存在单个实例的内存中，后续的 `get_task` 可能被路由到
+  另一个实例。在 Vercel 上建议使用同步工具 `generate_image` / `edit_image`；异步工具主要面向
+  stdio 与自托管 HTTP 部署。
+
+## 项目结构
+
+```
+src/config.ts          CLI/环境变量配置解析
+src/tools.ts           MCP 工具定义（JSON Schema）
+src/image-service.ts   provider 调用（OpenAI / Gemini）-> MCP 内容块
+src/task-store.ts      内存异步任务队列
+src/mcp-server.ts      MCP server 工厂：工具注册与分发
+src/http-transport.ts  Streamable HTTP 传输处理（无状态）+ 健康检查
+src/index.ts           CLI 入口（stdio / http / sse）
+api/mcp.ts             Vercel serverless 函数 -> /mcp
+api/health.ts          Vercel serverless 函数 -> /health
+web/index.html         静态说明页（Vercel 输出目录）
+```
+
 ## 开发
 
 ```bash
-npm run build       # 编译
+npm run build       # 编译到 dist/
+npm run typecheck   # 类型检查 src/ 与 api/
 npm run watch       # 监听编译
 npm test            # 单元测试
+npm start           # 以 stdio 运行已编译的服务器
+npm run start:http  # 以 HTTP 运行：http://localhost:3000/mcp
 ```
 
 ## 技术栈

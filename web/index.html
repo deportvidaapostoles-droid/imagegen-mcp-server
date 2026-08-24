@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>ImageGen MCP Server</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #16181d;
+        --muted: #5b6270;
+        --border: #e3e6ec;
+        --code-bg: #f5f6f8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d0f13;
+          --fg: #e8eaee;
+          --muted: #98a0ae;
+          --border: #262a33;
+          --code-bg: #161a21;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 3rem 1.25rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main { max-width: 44rem; margin: 0 auto; }
+      h1 { font-size: 1.6rem; margin: 0 0 0.25rem; }
+      p.lead { color: var(--muted); margin-top: 0; }
+      h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 2.25rem 0 0.5rem; }
+      code, pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.875rem;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        overflow-x: auto;
+      }
+      ul { padding-left: 1.1rem; }
+      li { margin: 0.3rem 0; }
+      .tag {
+        display: inline-block;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.1rem 0.6rem;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="tag">Model Context Protocol</span>
+      <h1>ImageGen MCP Server</h1>
+      <p class="lead">
+        Remote MCP server for AI image generation and editing (OpenAI-compatible and Google Gemini
+        providers), running as Vercel serverless functions.
+      </p>
+
+      <h2>Endpoints</h2>
+      <ul>
+        <li><code>POST /mcp</code> — MCP endpoint (Streamable HTTP transport, stateless)</li>
+        <li><code>GET /health</code> — health check (alias of <code>/api/health</code>)</li>
+      </ul>
+
+      <h2>Connect an MCP client</h2>
+      <pre><code>{
+  "mcpServers": {
+    "imagegen": {
+      "type": "http",
+      "url": "https://&lt;your-deployment&gt;.vercel.app/mcp"
+    }
+  }
+}</code></pre>
+
+      <h2>Tools</h2>
+      <ul>
+        <li><code>generate_image</code> — text to image</li>
+        <li><code>edit_image</code> — edit one or more images with a prompt</li>
+        <li><code>submit_task</code> / <code>get_task</code> — async task API</li>
+      </ul>
+
+      <footer>
+        This page is the only static asset of the deployment; all functionality is served by the
+        serverless functions above.
+      </footer>
+    </main>
+  </body>
+</html>

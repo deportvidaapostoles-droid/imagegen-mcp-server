@@ -1,0 +1,7 @@
+# Files that never need to be uploaded to the build
+dist
+coverage
+src/**/*.test.ts
+vitest.config.ts
+README.zh-CN.md
+.github
