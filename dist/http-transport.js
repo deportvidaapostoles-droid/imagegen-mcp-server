@@ -8,6 +8,7 @@
  * invocations, and it works equally well for a long-lived local process.
  */
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { AuthError, authenticateRequest, buildChallenge, fetchDiscoveryDocument, isAuthEnabled, protectedResourceMetadata, protectedResourceMetadataUrl, } from "./auth.js";
 import { createMcpServer, SERVER_NAME, SERVER_VERSION } from "./mcp-server.js";
 const ALLOWED_HEADERS = [
     "Content-Type",
@@ -62,6 +63,19 @@ export async function readJsonBody(req) {
     const raw = Buffer.concat(chunks).toString("utf8").trim();
     return raw.length === 0 ? undefined : JSON.parse(raw);
 }
+/** Public origin of this deployment, as seen by the client. */
+export function resolveBaseUrl(req, authConfig) {
+    if (authConfig?.publicUrl)
+        return authConfig.publicUrl;
+    const forwardedProto = headerValue(req, "x-forwarded-proto")?.split(",")[0]?.trim();
+    const host = headerValue(req, "x-forwarded-host") ?? headerValue(req, "host") ?? "localhost";
+    const proto = forwardedProto ?? (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+    return `${proto}://${host}`;
+}
+function headerValue(req, name) {
+    const raw = req.headers[name];
+    return Array.isArray(raw) ? raw[0] : raw;
+}
 /**
  * Handle a single MCP request over Streamable HTTP (stateless mode).
  * Safe to call from a `node:http` server or from a Vercel serverless function.
@@ -72,6 +86,30 @@ export async function handleMcpRequest(req, res, config, options = {}) {
     if (req.method === "OPTIONS") {
         res.writeHead(204).end();
         return;
+    }
+    const authConfig = options.auth;
+    let authInfo;
+    if (authConfig && isAuthEnabled(authConfig)) {
+        try {
+            authInfo = await authenticateRequest(req.headers, authConfig);
+        }
+        catch (error) {
+            const authError = error instanceof AuthError
+                ? error
+                : new AuthError(401, "invalid_token", error instanceof Error ? error.message : String(error));
+            if (authError.status >= 500) {
+                log("Authentication misconfigured:", authError.description);
+            }
+            const metadataUrl = protectedResourceMetadataUrl(resolveBaseUrl(req, authConfig));
+            if (authError.status === 401) {
+                res.setHeader("WWW-Authenticate", buildChallenge(metadataUrl, authError));
+            }
+            writeJson(res, authError.status, {
+                ...jsonRpcError(-32001, authError.description),
+                error_uri: metadataUrl,
+            });
+            return;
+        }
     }
     // Stateless mode has no long-lived stream to resume and no session to delete.
     if (req.method === "GET" || req.method === "DELETE") {
@@ -91,6 +129,9 @@ export async function handleMcpRequest(req, res, config, options = {}) {
     catch (error) {
         writeJson(res, 400, jsonRpcError(-32700, `Parse error: ${error instanceof Error ? error.message : String(error)}`));
         return;
+    }
+    if (authInfo) {
+        req.auth = authInfo;
     }
     const { server } = createMcpServer(config, { log });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -114,8 +155,51 @@ export async function handleMcpRequest(req, res, config, options = {}) {
         dispose();
     }
 }
+/** Serve the RFC 9728 protected resource metadata document. */
+export function handleProtectedResourceMetadata(req, res, authConfig) {
+    applyCorsHeaders(res);
+    if (req.method === "OPTIONS") {
+        res.writeHead(204).end();
+        return;
+    }
+    if (!isAuthEnabled(authConfig)) {
+        // No authorization server to advertise: RFC 9728 clients read a 404 as
+        // "this resource is not protected".
+        writeJson(res, 404, { error: "not_found", error_description: "This server does not require authentication" });
+        return;
+    }
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    writeJson(res, 200, protectedResourceMetadata(authConfig, resolveBaseUrl(req, authConfig)));
+}
+/**
+ * Mirror the identity provider's authorization server metadata.
+ * Clients predating RFC 9728 look for this document on the resource server
+ * itself; serving it keeps them working.
+ */
+export async function handleAuthorizationServerMetadata(req, res, authConfig) {
+    applyCorsHeaders(res);
+    if (req.method === "OPTIONS") {
+        res.writeHead(204).end();
+        return;
+    }
+    if (!isAuthEnabled(authConfig) || !authConfig.issuer) {
+        writeJson(res, 404, { error: "not_found", error_description: "This server does not require authentication" });
+        return;
+    }
+    try {
+        const document = await fetchDiscoveryDocument(authConfig.issuer);
+        res.setHeader("Cache-Control", "public, max-age=3600");
+        writeJson(res, 200, document);
+    }
+    catch (error) {
+        writeJson(res, 502, {
+            error: "server_error",
+            error_description: error instanceof Error ? error.message : String(error),
+        });
+    }
+}
 /** Payload served by the health endpoint. */
-export function healthPayload(config) {
+export function healthPayload(config, authConfig) {
     return {
         status: "ok",
         service: SERVER_NAME,
@@ -126,6 +210,15 @@ export function healthPayload(config) {
                 provider: config.provider,
                 model: config.model,
                 configured: Boolean(config.provider === "openai" ? config.openaiApiKey : config.geminiApiKey),
+            }
+            : {}),
+        ...(authConfig
+            ? {
+                auth: authConfig.configError
+                    ? "misconfigured"
+                    : isAuthEnabled(authConfig)
+                        ? "oauth"
+                        : "disabled",
             }
             : {}),
         timestamp: new Date().toISOString(),

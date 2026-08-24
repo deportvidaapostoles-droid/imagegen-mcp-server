@@ -15,6 +15,7 @@ An MCP server for AI image generation and editing with dual-provider support for
 - **Multi-image editing** supported for both OpenAI and Gemini
 - Three transports: stdio (default), Streamable HTTP (`/mcp`), legacy SSE
 - **Deployable to Vercel** as a remote MCP server (serverless functions, no persistent process)
+- **Optional OAuth 2.1 authentication** with an allow-list of who may use the server
 - Custom API proxy endpoints (`OPENAI_BASE_URL` / `GEMINI_BASE_URL`)
 - Auto-loads `.env`, also supports CLI arguments
 
@@ -248,6 +249,7 @@ The repository is ready to deploy as-is — no dashboard build settings need to 
 2. Add the environment variables (Project Settings → Environment Variables):
    `IMAGEGEN_PROVIDER`, `IMAGEGEN_MODEL` and `OPENAI_API_KEY` (or `GEMINI_API_KEY`).
    Optional: `OPENAI_BASE_URL` / `GEMINI_BASE_URL`, `IMAGEGEN_TIMEOUT`.
+   To restrict who can use the deployment, see [Authentication](#authentication).
 3. `git push` — every push deploys automatically.
 
 Resulting endpoints:
@@ -256,6 +258,8 @@ Resulting endpoints:
 |-------|----------|-------------|
 | `POST /mcp` | `api/mcp.ts` | MCP endpoint (Streamable HTTP) |
 | `GET /health` | `api/health.ts` | Health check (`/api/health` also works) |
+| `GET /.well-known/oauth-protected-resource` | `api/oauth-protected-resource.ts` | OAuth metadata (RFC 9728), when authentication is enabled |
+| `GET /.well-known/oauth-authorization-server` | `api/oauth-authorization-server.ts` | Mirror of the identity provider's discovery document |
 | `GET /` | static | Landing page (`web/index.html`) |
 
 Connect any modern MCP client:
@@ -281,6 +285,86 @@ Serverless notes:
   `generate_image` / `edit_image` tools on Vercel; the async tools remain intended for the
   stdio and self-hosted HTTP deployments.
 
+## Authentication
+
+By default the HTTP endpoint is **open**, which is fine for stdio or a local
+server but not for a public deployment: anyone who learns the URL can spend your
+provider credits. Set `MCP_AUTH_MODE=oauth` and the server becomes an OAuth 2.1
+*resource server*: it verifies bearer tokens issued by your identity provider
+and checks the caller against an allow-list.
+
+The server never issues tokens and keeps no session state. It:
+
+1. answers unauthenticated requests with `401` and a `WWW-Authenticate` header
+   pointing at `/.well-known/oauth-protected-resource/mcp` (RFC 9728),
+2. publishes that metadata document so the client discovers the authorization
+   server on its own,
+3. verifies the JWT access token against the provider's JWKS — signature,
+   issuer, expiry, and `audience` (the token must have been minted *for this
+   server*, per RFC 8707),
+4. rejects anyone outside `MCP_ALLOWED_EMAILS` / `MCP_ALLOWED_EMAIL_DOMAINS` /
+   `MCP_ALLOWED_SUBJECTS` with `403`.
+
+### Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `MCP_AUTH_MODE` | yes | `oauth` to enforce authentication, `none` (default) to leave the endpoint open |
+| `MCP_OAUTH_ISSUER` | with `oauth` | Issuer URL of the identity provider |
+| `MCP_OAUTH_AUDIENCE` | with `oauth` | Resource identifier the token must target — normally `https://<project>.vercel.app/mcp` |
+| `MCP_ALLOWED_EMAILS` | recommended | Comma-separated list of the people allowed in |
+| `MCP_ALLOWED_EMAIL_DOMAINS` | no | Allow every verified address of a domain |
+| `MCP_ALLOWED_SUBJECTS` | no | Allow by provider user id, for tokens without an email claim |
+| `MCP_EMAIL_CLAIM` | no | Claim carrying the email (default `email`; namespaced claims are matched by suffix) |
+| `MCP_REQUIRED_SCOPES` | no | Scopes the token must carry, e.g. `mcp:use` |
+| `MCP_OAUTH_JWKS_URI` | no | Skip discovery and use this JWKS directly |
+| `MCP_PUBLIC_URL` | no | Canonical public URL, when a proxy rewrites `Host` |
+
+If `MCP_AUTH_MODE=oauth` is set without an issuer or audience the server **fails
+closed**: every request is rejected rather than silently served without auth.
+
+### Example: Auth0
+
+Any OIDC provider issuing JWT access tokens works. With Auth0:
+
+1. **APIs → Create API**. Identifier: `https://<your-project>.vercel.app/mcp`
+   (this becomes `MCP_OAUTH_AUDIENCE`). Add a permission such as `mcp:use` if
+   you want to require a scope.
+2. **Applications → Create → Regular Web Application**, and allow
+   `https://claude.ai/api/mcp/auth_callback` as a callback URL (add the callback
+   of any other client you use). Enable Dynamic Client Registration under
+   *Tenant Settings → Advanced* if you want clients to register themselves; with
+   it off, paste the application's Client ID/Secret into the connector's
+   advanced settings.
+3. To match users by email, add an **Action** on the *Login* flow so the access
+   token carries the address:
+
+   ```js
+   exports.onExecutePostLogin = async (event, api) => {
+     api.accessToken.setCustomClaim('https://imagegen/email', event.user.email);
+   };
+   ```
+
+   Then set `MCP_EMAIL_CLAIM=https://imagegen/email` (or leave the default and
+   use `MCP_ALLOWED_SUBJECTS` with the Auth0 user ids).
+4. In Vercel set:
+
+   ```
+   MCP_AUTH_MODE=oauth
+   MCP_OAUTH_ISSUER=https://<tenant>.us.auth0.com
+   MCP_OAUTH_AUDIENCE=https://<your-project>.vercel.app/mcp
+   MCP_EMAIL_CLAIM=https://imagegen/email
+   MCP_ALLOWED_EMAILS=owner@example.com,manager@example.com
+   ```
+
+Verify with:
+
+```bash
+curl -i -X POST https://<your-project>.vercel.app/mcp   # -> 401 + WWW-Authenticate
+curl -s https://<your-project>.vercel.app/.well-known/oauth-protected-resource/mcp
+curl -s https://<your-project>.vercel.app/health        # -> "auth": "oauth"
+```
+
 ## Project structure
 
 ```
@@ -291,8 +375,10 @@ src/task-store.ts      In-memory async task queue
 src/mcp-server.ts      MCP server factory: tool registration + dispatch
 src/http-transport.ts  Streamable HTTP transport handler (stateless) + health payload
 src/index.ts           CLI entry point (stdio / http / sse)
+src/auth.ts            OAuth bearer verification + allow-list + metadata
 api/mcp.ts             Vercel serverless function -> /mcp
 api/health.ts          Vercel serverless function -> /health
+api/oauth-*.ts         Vercel serverless functions -> /.well-known/oauth-*
 web/index.html         Static landing page (Vercel output directory)
 ```
 

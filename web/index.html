@@ -74,6 +74,15 @@
         <li><code>GET /health</code> — health check (alias of <code>/api/health</code>)</li>
       </ul>
 
+      <h2>Access</h2>
+      <p style="color: var(--muted); margin-top: 0">
+        This deployment may require OAuth: unauthenticated requests are answered with
+        <code>401</code> and a <code>WWW-Authenticate</code> header pointing at
+        <code>/.well-known/oauth-protected-resource/mcp</code>, which modern MCP clients follow
+        automatically to log you in. Check <code>/health</code> to see whether authentication is
+        enabled.
+      </p>
+
       <h2>Connect an MCP client</h2>
       <pre><code>{
   "mcpServers": {
