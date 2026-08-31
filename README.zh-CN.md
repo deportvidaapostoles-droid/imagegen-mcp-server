@@ -406,8 +406,16 @@ curl -X POST --data-binary @photo.png \
 把返回的 `url` 传给 `images`。连接 Blob 存储后，服务器还会提供 **`upload_image` 工具**，
 客户端可自行上传：把 base64 传一次换回 URL，之后同一张图的多次编辑都复用该 URL，
 无需每次重新发送图片。此外还有拖放上传页面 `/upload.html`。上传支持
-PNG、JPEG、WebP、GIF，最大 25 MB，认证方式与 `/mcp` 相同；生成的 URL 是公开但
-不可猜测的——拿到链接的人都能查看该图片。
+PNG、JPEG、WebP、GIF，最大 25 MB，认证方式与 `/mcp` 相同。
+
+返回的 URL 取决于 Blob 存储的创建方式：
+
+- **公开存储**：永久、不可猜测的 URL，拿到链接的人都能查看该图片。
+- **私有存储**：带签名且会过期的 URL（默认 6 小时，可用 `BLOB_URL_TTL_SECONDS` 调整）。
+  过期后不再有任何可公开读取的内容，对客户或产品照片更合适。
+
+服务器会先尝试公开写入，被拒绝时自动改为签名 URL，因此两种存储都能直接使用；
+将 `BLOB_ACCESS` 设为 `public` 或 `private` 可跳过这次探测。
 
 ## 项目结构
 
