@@ -5,21 +5,36 @@
 /**
  * Convert an image URL to base64 encoded data
  */
+/** Largest image accepted from a URL, to keep a bad link from exhausting memory. */
+export const MAX_REMOTE_IMAGE_BYTES = 25 * 1024 * 1024;
+
 export async function urlToBase64(url: string): Promise<{ data: string; mimeType: string }> {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: { accept: 'image/*' } });
     if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.statusText}`);
+      throw new Error(`Failed to fetch image: HTTP ${response.status} ${response.statusText}`);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString('base64');
-    const contentType = response.headers.get('content-type') || 'image/png';
+    const declaredLength = Number(response.headers.get('content-length') ?? 0);
+    if (declaredLength > MAX_REMOTE_IMAGE_BYTES) {
+      throw new Error(
+        `Image is too large (${Math.round(declaredLength / 1024 / 1024)} MB, limit ${MAX_REMOTE_IMAGE_BYTES / 1024 / 1024} MB)`
+      );
+    }
 
-    return { data: base64, mimeType: contentType };
+    const contentType = (response.headers.get('content-type') || 'image/png').split(';')[0].trim();
+    if (!contentType.startsWith('image/')) {
+      throw new Error(`The URL does not point to an image (content-type: ${contentType})`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > MAX_REMOTE_IMAGE_BYTES) {
+      throw new Error(`Image is too large (limit ${MAX_REMOTE_IMAGE_BYTES / 1024 / 1024} MB)`);
+    }
+
+    return { data: buffer.toString('base64'), mimeType: contentType };
   } catch (error) {
-    throw new Error(`Failed to convert URL to base64: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to fetch image from URL: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -57,7 +72,16 @@ export async function parseImageInput(input: string): Promise<{ data: string; mi
     throw new Error('Invalid data URL format');
   }
 
-  // File path
+  // HTTP(S) URL — the only practical way to hand a large image to a *remote*
+  // MCP server: the file lives on the client's machine, the server does not
+  // share its filesystem, and inlining megabytes of base64 through the tool
+  // call is unreliable (it gets truncated on the way).
+  if (input.startsWith('http://') || input.startsWith('https://')) {
+    return urlToBase64(input);
+  }
+
+  // File path — only meaningful when the server runs on the same machine as
+  // the caller (stdio or a self-hosted HTTP server).
   if (input.startsWith('/')) {
     const fs = await import('fs/promises');
     const { extname } = await import('path');

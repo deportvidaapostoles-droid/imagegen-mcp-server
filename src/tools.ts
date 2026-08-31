@@ -13,7 +13,9 @@ export type Provider = "openai" | "gemini";
 export function createTools(provider: Provider, defaultTimeout: number): Tool[] {
   const providerLabel = provider === "openai" ? "OpenAI" : "Gemini";
   const imageDesc =
-    "An image to edit. Can be an absolute file path (e.g., /path/to/image.png) or a base64-encoded image string (optionally as a data URL like data:image/png;base64,...). " +
+    "An image to edit. Preferred: a public https:// URL of the image — this is the only reliable way to send a large image to a remote server. " +
+    "Also accepted: a base64-encoded string (optionally as a data URL like data:image/png;base64,...), or an absolute file path " +
+    "(/path/to/image.png), which only works when the server runs on the same machine as the caller. " +
     "Supported formats: PNG, JPEG, WebP.";
   const imagesNote =
     provider === "openai"
@@ -36,7 +38,8 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
     images: {
       type: "array",
       description:
-        "One or more images to edit. Each item can be an absolute file path or a base64-encoded image string." +
+        "One or more images to edit. Each item should be a public https:// URL; a base64 string or an absolute " +
+        "file path (local servers only) also work." +
         imagesNote,
       items: {
         type: "string",
@@ -200,10 +203,10 @@ export const SUBMIT_TASK_TOOL: Tool = {
         type: "array",
         description:
           "Required for 'edit' tasks. One or more input images. " +
-          "Each can be an absolute file path or base64-encoded string.",
+          "Each should be a public https:// URL; a base64 string or an absolute file path (local servers only) also work.",
         items: {
           type: "string",
-          description: "File path or base64-encoded image.",
+          description: "Image URL, base64-encoded image, or file path.",
         },
       },
     },

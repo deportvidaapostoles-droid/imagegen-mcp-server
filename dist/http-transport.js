@@ -63,6 +63,24 @@ export async function readJsonBody(req) {
     const raw = Buffer.concat(chunks).toString("utf8").trim();
     return raw.length === 0 ? undefined : JSON.parse(raw);
 }
+/** Read a request body as raw bytes, up to `limit`. */
+export async function readRawBody(req, limit) {
+    if (Buffer.isBuffer(req.body))
+        return req.body;
+    if (typeof req.body === "string")
+        return Buffer.from(req.body, "utf8");
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of req) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        size += buffer.length;
+        if (size > limit) {
+            throw new Error(`Request body too large (limit ${Math.round(limit / 1024 / 1024)} MB)`);
+        }
+        chunks.push(buffer);
+    }
+    return Buffer.concat(chunks);
+}
 /** Public origin of this deployment, as seen by the client. */
 export function resolveBaseUrl(req, authConfig) {
     if (authConfig?.publicUrl)
@@ -77,6 +95,47 @@ function headerValue(req, name) {
     return Array.isArray(raw) ? raw[0] : raw;
 }
 /**
+ * Authenticate a request against the configured mode, writing the rejection
+ * response itself when the caller must be turned away. Shared by every
+ * endpoint that must not be open to the world.
+ */
+export async function authorizeRequest(req, res, authConfig, log = () => { }) {
+    if (!authConfig || !isAuthEnabled(authConfig))
+        return { ok: true };
+    const baseUrl = resolveBaseUrl(req, authConfig);
+    try {
+        const authInfo = isOAuthMode(authConfig)
+            ? await authenticateRequest(req.headers, authConfig)
+            : authenticateStaticRequest(req.headers, new URL(req.url ?? "/", baseUrl), authConfig);
+        return { ok: true, authInfo };
+    }
+    catch (error) {
+        const authError = error instanceof AuthError
+            ? error
+            : new AuthError(401, "invalid_token", error instanceof Error ? error.message : String(error));
+        if (authError.status >= 500) {
+            log("Authentication misconfigured:", authError.description);
+        }
+        // Only OAuth mode advertises a login: a `WWW-Authenticate` header in
+        // shared-secret mode would send clients hunting for an authorization
+        // server that does not exist.
+        if (isOAuthMode(authConfig)) {
+            const metadataUrl = protectedResourceMetadataUrl(baseUrl);
+            if (authError.status === 401) {
+                res.setHeader("WWW-Authenticate", buildChallenge(metadataUrl, authError));
+            }
+            writeJson(res, authError.status, {
+                ...jsonRpcError(-32001, authError.description),
+                error_uri: metadataUrl,
+            });
+        }
+        else {
+            writeJson(res, authError.status, jsonRpcError(-32001, authError.description));
+        }
+        return { ok: false };
+    }
+}
+/**
  * Handle a single MCP request over Streamable HTTP (stateless mode).
  * Safe to call from a `node:http` server or from a Vercel serverless function.
  */
@@ -88,40 +147,10 @@ export async function handleMcpRequest(req, res, config, options = {}) {
         return;
     }
     const authConfig = options.auth;
-    let authInfo;
-    if (authConfig && isAuthEnabled(authConfig)) {
-        const baseUrl = resolveBaseUrl(req, authConfig);
-        try {
-            authInfo = isOAuthMode(authConfig)
-                ? await authenticateRequest(req.headers, authConfig)
-                : authenticateStaticRequest(req.headers, new URL(req.url ?? "/", baseUrl), authConfig);
-        }
-        catch (error) {
-            const authError = error instanceof AuthError
-                ? error
-                : new AuthError(401, "invalid_token", error instanceof Error ? error.message : String(error));
-            if (authError.status >= 500) {
-                log("Authentication misconfigured:", authError.description);
-            }
-            // Only OAuth mode advertises a login: a `WWW-Authenticate` header in
-            // shared-secret mode would send clients hunting for an authorization
-            // server that does not exist.
-            if (isOAuthMode(authConfig)) {
-                const metadataUrl = protectedResourceMetadataUrl(baseUrl);
-                if (authError.status === 401) {
-                    res.setHeader("WWW-Authenticate", buildChallenge(metadataUrl, authError));
-                }
-                writeJson(res, authError.status, {
-                    ...jsonRpcError(-32001, authError.description),
-                    error_uri: metadataUrl,
-                });
-            }
-            else {
-                writeJson(res, authError.status, jsonRpcError(-32001, authError.description));
-            }
-            return;
-        }
-    }
+    const authorized = await authorizeRequest(req, res, authConfig, log);
+    if (!authorized.ok)
+        return;
+    const authInfo = authorized.authInfo;
     // Stateless mode has no long-lived stream to resume and no session to delete.
     if (req.method === "GET" || req.method === "DELETE") {
         res.setHeader("Allow", "POST, OPTIONS");
