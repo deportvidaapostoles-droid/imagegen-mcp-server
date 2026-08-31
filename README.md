@@ -16,6 +16,7 @@ An MCP server for AI image generation and editing with dual-provider support for
 - Three transports: stdio (default), Streamable HTTP (`/mcp`), legacy SSE
 - **Deployable to Vercel** as a remote MCP server (serverless functions, no persistent process)
 - **Optional authentication**: a shared secret, or OAuth 2.1 with an allow-list of who may use the server
+- **Image uploads**: hand the tools a URL instead of megabytes of base64
 - Custom API proxy endpoints (`OPENAI_BASE_URL` / `GEMINI_BASE_URL`)
 - Auto-loads `.env`, also supports CLI arguments
 
@@ -258,6 +259,7 @@ Resulting endpoints:
 |-------|----------|-------------|
 | `POST /mcp` | `api/mcp.ts` | MCP endpoint (Streamable HTTP) |
 | `GET /health` | `api/health.ts` | Health check (`/api/health` also works) |
+| `POST /api/upload` | `api/upload.ts` | Upload an image, get a URL for `edit_image` (needs a Blob store) |
 | `GET /.well-known/oauth-protected-resource` | `api/oauth-protected-resource.ts` | OAuth metadata (RFC 9728), when authentication is enabled |
 | `GET /.well-known/oauth-authorization-server` | `api/oauth-authorization-server.ts` | Mirror of the identity provider's discovery document |
 | `GET /` | static | Landing page (`web/index.html`) |
@@ -391,6 +393,40 @@ curl -s https://<your-project>.vercel.app/.well-known/oauth-protected-resource/m
 curl -s https://<your-project>.vercel.app/health        # -> "auth": "oauth"
 ```
 
+## Sending images to a remote server
+
+`edit_image` and `submit_task` accept an image in three forms:
+
+| Form | Works where | Notes |
+|------|-------------|-------|
+| `https://…` URL | everywhere | The reliable option for a remote deployment |
+| base64 / data URL | everywhere | Fine for small images; a large one gets truncated in transit |
+| `/absolute/path.png` | stdio and self-hosted HTTP only | The Vercel function has no access to your filesystem |
+
+A file path fails on Vercel with `ENOENT: no such file or directory` — not a bug:
+the file is on the caller's machine and the function runs elsewhere. The two
+never share a disk. Inlining the image as base64 is possible in principle but
+brittle in practice: an agent copying a megabyte-long string into a tool call
+truncates it, and the provider answers `Base64 decoding failed`.
+
+Hence uploads. Connect a Vercel Blob store to the project (*Storage → Create →
+Blob*); Vercel then sets `BLOB_READ_WRITE_TOKEN` for you and `/api/upload`
+starts working:
+
+```bash
+curl -X POST --data-binary @photo.png \
+     -H 'content-type: image/png' \
+     -H 'authorization: Bearer <your MCP_AUTH_TOKENS value>' \
+     https://<your-project>.vercel.app/api/upload
+# {"url":"https://….public.blob.vercel-storage.com/imagegen/….png", …}
+```
+
+Pass that `url` in `images`. There is also a drag-and-drop page at
+`/upload.html` for when a terminal is not at hand. Uploads accept PNG, JPEG,
+WebP and GIF up to 25 MB, require the same authentication as `/mcp`, and
+produce a public but unguessable URL — anyone holding the link can view the
+image.
+
 ## Project structure
 
 ```
@@ -402,9 +438,12 @@ src/mcp-server.ts      MCP server factory: tool registration + dispatch
 src/http-transport.ts  Streamable HTTP transport handler (stateless) + health payload
 src/index.ts           CLI entry point (stdio / http / sse)
 src/auth.ts            OAuth bearer verification + allow-list + metadata
+src/uploads.ts         Image upload storage (Vercel Blob)
 api/mcp.ts             Vercel serverless function -> /mcp
 api/health.ts          Vercel serverless function -> /health
 api/oauth-*.ts         Vercel serverless functions -> /.well-known/oauth-*
+api/upload.ts          Vercel serverless function -> /api/upload
+web/upload.html        Drag-and-drop upload page
 web/index.html         Static landing page (Vercel output directory)
 ```
 

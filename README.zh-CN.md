@@ -16,6 +16,7 @@ AI 图片生成与编辑 MCP 服务器，支持 OpenAI 和 Google Gemini 双 Pro
 - 支持三种 transport：stdio（默认）、Streamable HTTP（`/mcp`）、旧版 SSE
 - **可部署到 Vercel**：作为远程 MCP 服务器运行（serverless 函数，无常驻进程）
 - **可选认证**：共享密钥，或带白名单的 OAuth 2.1
+- **图片上传**：给工具一个 URL，无需传输大段 base64
 - 支持自定义 API 代理地址（`OPENAI_BASE_URL` / `GEMINI_BASE_URL`）
 - 支持 `.env` 自动加载，也支持通过 CLI 参数传配置
 
@@ -256,6 +257,7 @@ MCP_TRANSPORT=sse MCP_PORT=3000 npx -y github:ptbsare/imagegen-mcp-server
 |------|------|------|
 | `POST /mcp` | `api/mcp.ts` | MCP 端点（Streamable HTTP） |
 | `GET /health` | `api/health.ts` | 健康检查（`/api/health` 同样可用） |
+| `POST /api/upload` | `api/upload.ts` | 上传图片并取得 URL（需 Blob 存储） |
 | `GET /.well-known/oauth-protected-resource` | `api/oauth-protected-resource.ts` | 启用认证时的 OAuth 元数据（RFC 9728） |
 | `GET /.well-known/oauth-authorization-server` | `api/oauth-authorization-server.ts` | 身份提供商发现文档的镜像 |
 | `GET /` | 静态 | 说明页（`web/index.html`） |
@@ -376,6 +378,35 @@ curl -s https://<your-project>.vercel.app/.well-known/oauth-protected-resource/m
 curl -s https://<your-project>.vercel.app/health        # -> "auth": "oauth"
 ```
 
+## 向远程服务器传图
+
+`edit_image` 与 `submit_task` 接受三种形式的图片：
+
+| 形式 | 适用范围 | 说明 |
+|------|----------|------|
+| `https://…` URL | 全部 | 远程部署下唯一可靠的方式 |
+| base64 / data URL | 全部 | 小图可用；大图在传输途中会被截断 |
+| `/绝对路径.png` | 仅 stdio 与自托管 HTTP | Vercel 函数无法访问你的文件系统 |
+
+在 Vercel 上传文件路径会得到 `ENOENT: no such file or directory`——这不是缺陷：
+文件在调用方机器上，函数在另一台机器上，二者不共享磁盘。理论上可以内联 base64，
+但实际很脆弱：代理把上百万字符的字符串复制进工具调用时会截断，服务商随即返回
+`Base64 decoding failed`。
+
+因此提供上传。为项目连接 Vercel Blob 存储（*Storage → Create → Blob*），Vercel
+会自动设置 `BLOB_READ_WRITE_TOKEN`，`/api/upload` 即可使用：
+
+```bash
+curl -X POST --data-binary @photo.png \
+     -H 'content-type: image/png' \
+     -H 'authorization: Bearer <MCP_AUTH_TOKENS 的值>' \
+     https://<your-project>.vercel.app/api/upload
+```
+
+把返回的 `url` 传给 `images`。另有拖放上传页面 `/upload.html`。上传支持
+PNG、JPEG、WebP、GIF，最大 25 MB，认证方式与 `/mcp` 相同；生成的 URL 是公开但
+不可猜测的——拿到链接的人都能查看该图片。
+
 ## 项目结构
 
 ```
@@ -387,9 +418,12 @@ src/mcp-server.ts      MCP server 工厂：工具注册与分发
 src/http-transport.ts  Streamable HTTP 传输处理（无状态）+ 健康检查
 src/index.ts           CLI 入口（stdio / http / sse）
 src/auth.ts            OAuth bearer 校验 + 白名单 + 元数据
+src/uploads.ts         图片上传存储（Vercel Blob）
 api/mcp.ts             Vercel serverless 函数 -> /mcp
 api/health.ts          Vercel serverless 函数 -> /health
 api/oauth-*.ts         Vercel serverless 函数 -> /.well-known/oauth-*
+api/upload.ts          Vercel serverless 函数 -> /api/upload
+web/upload.html        拖放上传页面
 web/index.html         静态说明页（Vercel 输出目录）
 ```
 

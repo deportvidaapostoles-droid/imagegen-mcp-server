@@ -9,6 +9,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { ServerRuntimeConfig } from "./config.js";
 import {
@@ -88,6 +89,24 @@ export async function readJsonBody(req: NodeRequest): Promise<unknown> {
   return raw.length === 0 ? undefined : JSON.parse(raw);
 }
 
+/** Read a request body as raw bytes, up to `limit`. */
+export async function readRawBody(req: NodeRequest, limit: number): Promise<Buffer> {
+  if (Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === "string") return Buffer.from(req.body, "utf8");
+
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+    size += buffer.length;
+    if (size > limit) {
+      throw new Error(`Request body too large (limit ${Math.round(limit / 1024 / 1024)} MB)`);
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 export interface McpHttpHandlerOptions {
   log?: (...args: unknown[]) => void;
   /** When set to OAuth mode, every request must carry a valid bearer token. */
@@ -109,6 +128,52 @@ function headerValue(req: NodeRequest, name: string): string | undefined {
 }
 
 /**
+ * Authenticate a request against the configured mode, writing the rejection
+ * response itself when the caller must be turned away. Shared by every
+ * endpoint that must not be open to the world.
+ */
+export async function authorizeRequest(
+  req: NodeRequest,
+  res: ServerResponse,
+  authConfig: AuthConfig | undefined,
+  log: (...args: unknown[]) => void = () => {}
+): Promise<{ ok: true; authInfo?: AuthInfo } | { ok: false }> {
+  if (!authConfig || !isAuthEnabled(authConfig)) return { ok: true };
+
+  const baseUrl = resolveBaseUrl(req, authConfig);
+  try {
+    const authInfo = isOAuthMode(authConfig)
+      ? await authenticateRequest(req.headers, authConfig)
+      : authenticateStaticRequest(req.headers, new URL(req.url ?? "/", baseUrl), authConfig);
+    return { ok: true, authInfo };
+  } catch (error) {
+    const authError =
+      error instanceof AuthError
+        ? error
+        : new AuthError(401, "invalid_token", error instanceof Error ? error.message : String(error));
+    if (authError.status >= 500) {
+      log("Authentication misconfigured:", authError.description);
+    }
+    // Only OAuth mode advertises a login: a `WWW-Authenticate` header in
+    // shared-secret mode would send clients hunting for an authorization
+    // server that does not exist.
+    if (isOAuthMode(authConfig)) {
+      const metadataUrl = protectedResourceMetadataUrl(baseUrl);
+      if (authError.status === 401) {
+        res.setHeader("WWW-Authenticate", buildChallenge(metadataUrl, authError));
+      }
+      writeJson(res, authError.status, {
+        ...jsonRpcError(-32001, authError.description),
+        error_uri: metadataUrl,
+      });
+    } else {
+      writeJson(res, authError.status, jsonRpcError(-32001, authError.description));
+    }
+    return { ok: false };
+  }
+}
+
+/**
  * Handle a single MCP request over Streamable HTTP (stateless mode).
  * Safe to call from a `node:http` server or from a Vercel serverless function.
  */
@@ -127,39 +192,9 @@ export async function handleMcpRequest(
   }
 
   const authConfig = options.auth;
-  let authInfo;
-  if (authConfig && isAuthEnabled(authConfig)) {
-    const baseUrl = resolveBaseUrl(req, authConfig);
-    try {
-      authInfo = isOAuthMode(authConfig)
-        ? await authenticateRequest(req.headers, authConfig)
-        : authenticateStaticRequest(req.headers, new URL(req.url ?? "/", baseUrl), authConfig);
-    } catch (error) {
-      const authError =
-        error instanceof AuthError
-          ? error
-          : new AuthError(401, "invalid_token", error instanceof Error ? error.message : String(error));
-      if (authError.status >= 500) {
-        log("Authentication misconfigured:", authError.description);
-      }
-      // Only OAuth mode advertises a login: a `WWW-Authenticate` header in
-      // shared-secret mode would send clients hunting for an authorization
-      // server that does not exist.
-      if (isOAuthMode(authConfig)) {
-        const metadataUrl = protectedResourceMetadataUrl(baseUrl);
-        if (authError.status === 401) {
-          res.setHeader("WWW-Authenticate", buildChallenge(metadataUrl, authError));
-        }
-        writeJson(res, authError.status, {
-          ...jsonRpcError(-32001, authError.description),
-          error_uri: metadataUrl,
-        });
-      } else {
-        writeJson(res, authError.status, jsonRpcError(-32001, authError.description));
-      }
-      return;
-    }
-  }
+  const authorized = await authorizeRequest(req, res, authConfig, log);
+  if (!authorized.ok) return;
+  const authInfo = authorized.authInfo;
 
   // Stateless mode has no long-lived stream to resume and no session to delete.
   if (req.method === "GET" || req.method === "DELETE") {

@@ -45,6 +45,9 @@
     },
     "api/oauth-authorization-server.ts": {
       "maxDuration": 10
+    },
+    "api/upload.ts": {
+      "maxDuration": 30
     }
   }
 }
