@@ -421,8 +421,11 @@ curl -X POST --data-binary @photo.png \
 # {"url":"https://….public.blob.vercel-storage.com/imagegen/….png", …}
 ```
 
-Pass that `url` in `images`. There is also a drag-and-drop page at
-`/upload.html` for when a terminal is not at hand. Uploads accept PNG, JPEG,
+Pass that `url` in `images`. Once a Blob store is connected the server also
+advertises an **`upload_image` tool**, so the client can do this itself: hand it
+the base64 once, get a URL back, and reuse that URL across every edit of the
+same photo instead of re-sending the image on each call. There is also a
+drag-and-drop page at `/upload.html` for when neither is convenient. Uploads accept PNG, JPEG,
 WebP and GIF up to 25 MB, require the same authentication as `/mcp`, and
 produce a public but unguessable URL — anyone holding the link can view the
 image.
