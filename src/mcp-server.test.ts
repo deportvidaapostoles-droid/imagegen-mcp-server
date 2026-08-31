@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { getServerRuntimeConfig } from './config.js';
 import { createMcpServer } from './mcp-server.js';
@@ -97,5 +97,54 @@ describe('http transport helpers', () => {
   it('returns undefined for an empty body', async () => {
     const req = Readable.from([]);
     await expect(readJsonBody(req as any)).resolves.toBeUndefined();
+  });
+});
+
+describe('upload_image tool', () => {
+  const originalToken = process.env.BLOB_READ_WRITE_TOKEN;
+  afterEach(() => {
+    if (originalToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+    else process.env.BLOB_READ_WRITE_TOKEN = originalToken;
+  });
+
+  const callTool = async (name: string, args: Record<string, unknown>) => {
+    const { server } = createMcpServer(configWith({ OPENAI_API_KEY: 'sk-test-key' }));
+    const handler = (server as any)._requestHandlers.get(CallToolRequestSchema.shape.method.value);
+    return handler(
+      { method: 'tools/call', params: { name, arguments: args } },
+      { signal: new AbortController().signal }
+    );
+  };
+
+  it('is hidden when the deployment has nowhere to store images', () => {
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    const { tools } = createMcpServer(configWith({ OPENAI_API_KEY: 'sk-test-key' }));
+    expect(tools.map((tool) => tool.name)).not.toContain('upload_image');
+  });
+
+  it('is advertised first once storage is connected', () => {
+    process.env.BLOB_READ_WRITE_TOKEN = 'tok';
+    const { tools } = createMcpServer(configWith({ OPENAI_API_KEY: 'sk-test-key' }));
+    expect(tools[0].name).toBe('upload_image');
+  });
+
+  it('explains the missing configuration instead of throwing', async () => {
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    const result = await callTool('upload_image', { image: 'aGVsbG8=' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('BLOB_READ_WRITE_TOKEN');
+  });
+
+  it('hands a URL straight back instead of storing it again', async () => {
+    process.env.BLOB_READ_WRITE_TOKEN = 'tok';
+    const result = await callTool('upload_image', { image: 'https://example.com/photo.png' });
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text).url).toBe('https://example.com/photo.png');
+  });
+
+  it('rejects a base64 string that arrived empty or truncated to nothing', async () => {
+    process.env.BLOB_READ_WRITE_TOKEN = 'tok';
+    const result = await callTool('upload_image', { image: '   ' });
+    expect(result.isError).toBe(true);
   });
 });

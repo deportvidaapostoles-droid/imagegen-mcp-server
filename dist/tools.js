@@ -137,6 +137,34 @@ export function createTools(provider, defaultTimeout) {
     return [GENERATE_IMAGE_TOOL, EDIT_IMAGE_TOOL];
 }
 /**
+ * Upload an image once and reuse the returned URL.
+ * Only advertised when the deployment has somewhere to store the bytes.
+ */
+export const UPLOAD_IMAGE_TOOL = {
+    name: "upload_image",
+    description: "Upload an image to this server and get back a public https:// URL. " +
+        "Use this FIRST when you have an image to edit: pass the base64 once here, then hand the returned URL " +
+        "to edit_image or submit_task — including across several edits of the same photo. " +
+        "This server runs remotely and cannot read files on your machine, so a file path never works; " +
+        "inlining a large base64 string in every call is unreliable because it gets truncated in transit.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            image: {
+                type: "string",
+                description: "The image as a base64-encoded string, or a data URL (data:image/png;base64,...). " +
+                    "Keep it small — resize or re-encode to JPEG first if the original is several megabytes.",
+            },
+            mime_type: {
+                type: "string",
+                description: "Image type, when it cannot be read from a data URL. One of: image/png, image/jpeg, image/webp, image/gif. Defaults to image/png.",
+                enum: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+            },
+        },
+        required: ["image"],
+    },
+};
+/**
  * Submit an image generation or editing task.
  * Returns immediately with a task_id. Use get_task to poll for results.
  */

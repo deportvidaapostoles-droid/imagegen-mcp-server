@@ -16,7 +16,8 @@ import {
 import type { ServerRuntimeConfig } from "./config.js";
 import { ImageService, type ImageBlock } from "./image-service.js";
 import { TaskStore, type Task, type TaskKind } from "./task-store.js";
-import { GET_TASK_TOOL, SUBMIT_TASK_TOOL, createTools } from "./tools.js";
+import { GET_TASK_TOOL, SUBMIT_TASK_TOOL, UPLOAD_IMAGE_TOOL, createTools } from "./tools.js";
+import { isUploadConfigured, storeImage } from "./uploads.js";
 import { createErrorResponse, formatErrorMessage } from "./utils.js";
 import type { ImageQuality } from "./validators.js";
 
@@ -49,7 +50,11 @@ export function createMcpServer(
 
   const asyncTools = [SUBMIT_TASK_TOOL, GET_TASK_TOOL];
   const syncTools = createTools(config.provider, config.timeout);
-  const tools: Tool[] = config.asyncOnly ? asyncTools : [...asyncTools, ...syncTools];
+  // The upload tool is only useful where the bytes have somewhere to go.
+  const uploadTools = isUploadConfigured() ? [UPLOAD_IMAGE_TOOL] : [];
+  const tools: Tool[] = config.asyncOnly
+    ? [...uploadTools, ...asyncTools]
+    : [...uploadTools, ...asyncTools, ...syncTools];
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -67,6 +72,8 @@ export function createMcpServer(
 
     try {
       switch (name) {
+        case "upload_image":
+          return await handleUploadImage(args);
         case "submit_task":
           return handleSubmitTask(taskStore, args);
         case "get_task":
@@ -107,6 +114,43 @@ export function createMcpServer(
 }
 
 // ─── Tool handlers ──────────────────────────────────────────────────────────
+
+async function handleUploadImage(args: Record<string, unknown>): Promise<CallToolResult> {
+  if (!isUploadConfigured()) {
+    return createErrorResponse(
+      "Uploads are not configured on this server: connect a Vercel Blob store to the project so BLOB_READ_WRITE_TOKEN is set."
+    );
+  }
+
+  const image = requireString(args.image, "image");
+  let base64 = image;
+  let mimeType = optionalString(args.mime_type) ?? "image/png";
+
+  const dataUrl = /^data:(image\/[\w+.-]+);base64,(.*)$/s.exec(image.trim());
+  if (dataUrl) {
+    mimeType = dataUrl[1];
+    base64 = dataUrl[2];
+  } else if (/^https?:\/\//.test(image.trim())) {
+    // Already reachable: nothing to store, hand the link straight back.
+    return jsonResult({ url: image.trim(), message: "This image is already a URL; pass it to images as is." });
+  }
+
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(base64.replace(/\s+/g, ""), "base64");
+  } catch {
+    return createErrorResponse("image is not valid base64");
+  }
+  if (buffer.length === 0) {
+    return createErrorResponse("image decoded to zero bytes — the base64 string is empty or was truncated in transit");
+  }
+
+  const result = await storeImage(buffer, mimeType);
+  return jsonResult({
+    ...result,
+    message: "Pass this url in the images parameter of edit_image or submit_task.",
+  });
+}
 
 function handleSubmitTask(taskStore: TaskStore, args: Record<string, unknown>): CallToolResult {
   const kind = args.kind;

@@ -403,7 +403,9 @@ curl -X POST --data-binary @photo.png \
      https://<your-project>.vercel.app/api/upload
 ```
 
-把返回的 `url` 传给 `images`。另有拖放上传页面 `/upload.html`。上传支持
+把返回的 `url` 传给 `images`。连接 Blob 存储后，服务器还会提供 **`upload_image` 工具**，
+客户端可自行上传：把 base64 传一次换回 URL，之后同一张图的多次编辑都复用该 URL，
+无需每次重新发送图片。此外还有拖放上传页面 `/upload.html`。上传支持
 PNG、JPEG、WebP、GIF，最大 25 MB，认证方式与 `/mcp` 相同；生成的 URL 是公开但
 不可猜测的——拿到链接的人都能查看该图片。
 
