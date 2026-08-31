@@ -55,6 +55,20 @@ export async function openAIImageToBase64(image: {
   return null;
 }
 
+/** True when this process is a serverless deployment with no access to the caller's disk. */
+export function isRemoteDeployment(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.VERCEL || env.AWS_LAMBDA_FUNCTION_NAME || env.MCP_REMOTE_DEPLOYMENT);
+}
+
+/**
+ * A file path is meaningless to a remote server, and an agent that is handed a
+ * bare ENOENT tends to retry the same path. Say what to do instead.
+ */
+export const REMOTE_FILE_PATH_HELP =
+  'This server runs remotely and cannot read files on your machine. ' +
+  'Upload the image (POST it to /api/upload, or use the /upload.html page) and pass the returned https:// URL ' +
+  'in the images parameter instead. A base64-encoded string also works for small images.';
+
 /**
  * Parse an image input that can be:
  * - A file path (absolute path starting with /)
@@ -83,6 +97,9 @@ export async function parseImageInput(input: string): Promise<{ data: string; mi
   // File path — only meaningful when the server runs on the same machine as
   // the caller (stdio or a self-hosted HTTP server).
   if (input.startsWith('/')) {
+    if (isRemoteDeployment()) {
+      throw new Error(REMOTE_FILE_PATH_HELP);
+    }
     const fs = await import('fs/promises');
     const { extname } = await import('path');
     const ext = extname(input).toLowerCase();
@@ -93,8 +110,17 @@ export async function parseImageInput(input: string): Promise<{ data: string; mi
       '.webp': 'image/webp',
     };
     const mimeType = mimeMap[ext] || 'image/png';
-    const buffer = await fs.readFile(input);
-    return { data: buffer.toString('base64'), mimeType };
+    try {
+      const buffer = await fs.readFile(input);
+      return { data: buffer.toString('base64'), mimeType };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+        throw new Error(
+          `No such file: ${input}. ${REMOTE_FILE_PATH_HELP}`
+        );
+      }
+      throw error;
+    }
   }
 
   // Raw base64
