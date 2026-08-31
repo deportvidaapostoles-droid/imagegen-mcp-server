@@ -97,3 +97,40 @@ describe('parseImageInput with URLs', () => {
     await expect(parseImageInput('aGVsbG8=')).resolves.toEqual({ data: 'aGVsbG8=', mimeType: 'image/png' });
   });
 });
+
+describe('file paths on a remote deployment', () => {
+  const originalVercel = process.env.VERCEL;
+  afterEach(() => {
+    if (originalVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = originalVercel;
+  });
+
+  it('says what to do instead of failing with a bare ENOENT', async () => {
+    process.env.VERCEL = '1';
+    await expect(parseImageInput('/mnt/user-data/uploads/photo.png')).rejects.toThrow(
+      /cannot read files on your machine.*\/api\/upload/s
+    );
+  });
+
+  it('still reads a real file when running locally', async () => {
+    delete process.env.VERCEL;
+    const { writeFile, mkdtemp, rm } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const dir = await mkdtemp(join(tmpdir(), 'imagegen-'));
+    const file = join(dir, 'photo.png');
+    await writeFile(file, Buffer.from('local-bytes'));
+    try {
+      const result = await parseImageInput(file);
+      expect(Buffer.from(result.data, 'base64').toString()).toBe('local-bytes');
+      expect(result.mimeType).toBe('image/png');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('adds the same guidance to a missing local file', async () => {
+    delete process.env.VERCEL;
+    await expect(parseImageInput('/definitely/not/here.png')).rejects.toThrow(/No such file/);
+  });
+});
