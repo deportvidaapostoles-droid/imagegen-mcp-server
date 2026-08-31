@@ -23,6 +23,8 @@
       h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
       p.lead { color: var(--muted); margin-top: 0; }
       label { display: block; font-size: .85rem; color: var(--muted); margin: 1.25rem 0 .35rem; }
+      p.hint { font-size: .8rem; color: var(--muted); margin: .35rem 0 0; }
+      input.needed { border-color: #d33; }
       input[type="password"] {
         width: 100%; padding: .6rem .75rem; border: 1px solid var(--border);
         border-radius: 8px; background: var(--code-bg); color: var(--fg); font: inherit;
@@ -54,8 +56,9 @@
         <code>images</code> de <code>edit_image</code>. Así no hay que pasar la imagen en base64.
       </p>
 
-      <label for="token">Token de acceso (si el servidor lo pide)</label>
-      <input id="token" type="password" placeholder="MCP_AUTH_TOKENS" autocomplete="off" />
+      <label for="token">Token de acceso — el valor de <code>MCP_AUTH_TOKENS</code></label>
+      <input id="token" type="password" placeholder="Pégalo aquí antes de subir" autocomplete="off" />
+      <p class="hint">Déjalo vacío solo si el servidor está sin autenticación (<code>MCP_AUTH_MODE=none</code>).</p>
 
       <div id="drop" tabindex="0">Arrastra una imagen aquí o haz clic para elegirla</div>
       <input id="file" type="file" accept="image/*" hidden />
@@ -101,11 +104,16 @@
           const headers = { 'content-type': file.type || 'application/octet-stream' };
           if (token) headers.authorization = 'Bearer ' + token;
           const response = await fetch('/api/upload', { method: 'POST', headers, body: file });
-          const payload = await response.json();
+          const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            out.innerHTML = '<p class="err">' + escapeHtml(payload.error_description || 'Error ' + response.status) + '</p>';
+            out.innerHTML = '<p class="err">' + escapeHtml(describeError(response.status, payload, token)) + '</p>';
+            if (response.status === 401) {
+              tokenInput.classList.add('needed');
+              tokenInput.focus();
+            }
             return;
           }
+          tokenInput.classList.remove('needed');
           out.innerHTML =
             '<p>Listo. Pasa esta URL al parámetro <code>images</code>:</p>' +
             '<pre id="url">' + escapeHtml(payload.url) + '</pre>' +
@@ -118,6 +126,21 @@
         } catch (error) {
           out.innerHTML = '<p class="err">' + escapeHtml(String(error)) + '</p>';
         }
+      }
+
+      function describeError(status, payload, token) {
+        // The endpoint answers 401 in the JSON-RPC shape the MCP route uses, and
+        // everything else as {error, error_description}; read both.
+        const detail = payload.error_description || (payload.error && payload.error.message) || '';
+        if (status === 401) {
+          return token
+            ? 'El token no es válido. Comprueba que coincide exactamente con MCP_AUTH_TOKENS.'
+            : 'Falta el token de acceso: pégalo en el campo de arriba y vuelve a subir la imagen.';
+        }
+        if (status === 501) {
+          return detail || 'El servidor no tiene almacenamiento configurado para las subidas.';
+        }
+        return detail || ('Error ' + status);
       }
 
       function escapeHtml(value) {
