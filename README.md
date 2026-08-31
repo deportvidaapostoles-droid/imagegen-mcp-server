@@ -426,9 +426,19 @@ advertises an **`upload_image` tool**, so the client can do this itself: hand it
 the base64 once, get a URL back, and reuse that URL across every edit of the
 same photo instead of re-sending the image on each call. There is also a
 drag-and-drop page at `/upload.html` for when neither is convenient. Uploads accept PNG, JPEG,
-WebP and GIF up to 25 MB, require the same authentication as `/mcp`, and
-produce a public but unguessable URL — anyone holding the link can view the
-image.
+WebP and GIF up to 25 MB and require the same authentication as `/mcp`.
+
+The URL you get back depends on how the Blob store was created:
+
+- **Public store** — a permanent, unguessable URL. Anyone holding the link can
+  view the image.
+- **Private store** — a signed URL that expires (6 h by default, set
+  `BLOB_URL_TTL_SECONDS` to change it). Nothing is left publicly readable once
+  it lapses, which is the better default for customer or product photos.
+
+The server tries a public blob first and falls back to a signed URL when the
+store refuses it, so either kind of store works untouched; set `BLOB_ACCESS` to
+`public` or `private` to skip the probe.
 
 ## Project structure
 
