@@ -75,6 +75,12 @@ export async function parseImageInput(input) {
     // share its filesystem, and inlining megabytes of base64 through the tool
     // call is unreliable (it gets truncated on the way).
     if (input.startsWith('http://') || input.startsWith('https://')) {
+        // An image this deployment stored itself is read with the store token: a
+        // signed link can expire or lose a query parameter on the way here.
+        const { readStoredImage } = await import('./uploads.js');
+        const stored = await readStoredImage(input);
+        if (stored)
+            return stored;
         return urlToBase64(input);
     }
     // File path — only meaningful when the server runs on the same machine as
