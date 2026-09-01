@@ -69,7 +69,7 @@ npm run build
 npx -y github:ptbsare/imagegen-mcp-server --provider openai --model gpt-image-1
 
 # Gemini
-npx -y github:ptbsare/imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image
+npx -y github:ptbsare/imagegen-mcp-server --provider gemini --model gemini-3.1-flash-image-preview
 
 # Async-only mode (only submit_task and get_task tools)
 IMAGEGEN_ASYNC_ONLY=true npx -y github:ptbsare/imagegen-mcp-server
@@ -223,7 +223,7 @@ Set `IMAGEGEN_BLOCKING_POLL=true` to make `get_task` block for up to 120 seconds
 ## Supported Models
 
 - **OpenAI / OpenAI-compatible**: `gpt-image-1`, `gpt-image-2`, `dall-e-3`, `dall-e-2`, `doubao-*`, `volcengine/doubao-*`
-- **Gemini**: `gemini-2.5-flash-image`, `gemini-2.0-flash-exp`, `imagen-*`
+- **Gemini**: `gemini-3.1-flash-image-preview` (Nano Banana 2), `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite), `gemini-3-pro-image` (Nano Banana Pro), `imagen-*`. `gemini-2.5-flash-image` (the original Nano Banana) still works but Google shuts it down on 2026-10-02.
 
 ## Remote HTTP transport
 

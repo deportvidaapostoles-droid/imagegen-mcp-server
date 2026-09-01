@@ -37,8 +37,9 @@ async function listModels() {
         }
         console.log('\n' + '='.repeat(80));
         console.log('\nRecommended for image generation:');
-        console.log('  - gemini-2.5-flash-image (fast, good quality)');
-        console.log('  - gemini-2.0-flash-exp-image-generation (experimental)');
+        console.log('  - gemini-3.1-flash-image-preview (Nano Banana 2: versatile, up to 4K)');
+        console.log('  - gemini-3.1-flash-lite-image (Nano Banana 2 Lite: fastest, cheapest)');
+        console.log('  - gemini-3-pro-image (Nano Banana Pro: highest fidelity)');
     }
     catch (error) {
         console.error('Failed to fetch models:', error);

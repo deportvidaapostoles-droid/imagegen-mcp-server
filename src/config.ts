@@ -270,7 +270,7 @@ export function getCliHelpText(): string {
     '',
     'Examples:',
     '  npx -y imagegen-mcp-server --provider openai --model gpt-image-1',
-    '  npx -y imagegen-mcp-server --provider gemini --model gemini-2.5-flash-image',
+    '  npx -y imagegen-mcp-server --provider gemini --model gemini-3.1-flash-image-preview',
     '  IMAGEGEN_ASYNC_ONLY=true npx -y imagegen-mcp-server',
   ].join('\n');
 }
