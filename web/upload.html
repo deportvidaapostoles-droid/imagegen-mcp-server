@@ -29,6 +29,8 @@
         width: 100%; padding: .6rem .75rem; border: 1px solid var(--border);
         border-radius: 8px; background: var(--code-bg); color: var(--fg); font: inherit;
       }
+      #saved { display: none; font-size: .8rem; color: var(--muted); margin: .35rem 0 0; }
+      #saved.on { display: block; }
       #drop {
         margin-top: 1rem; border: 2px dashed var(--border); border-radius: 12px;
         padding: 2.5rem 1rem; text-align: center; color: var(--muted); cursor: pointer;
@@ -36,38 +38,60 @@
       }
       #drop.over, #drop:hover { border-color: var(--accent); color: var(--fg); }
       #out { margin-top: 1.25rem; }
+      .item {
+        display: flex; gap: .75rem; align-items: flex-start; padding: .75rem 0;
+        border-top: 1px solid var(--border);
+      }
+      .item img {
+        width: 56px; height: 56px; object-fit: cover; border-radius: 6px;
+        border: 1px solid var(--border); flex: none; background: var(--code-bg);
+      }
+      .item .body { min-width: 0; flex: 1; }
+      .item .name { font-size: .8rem; color: var(--muted); }
       pre {
         background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
-        padding: .8rem; overflow-x: auto; font-size: .8rem; white-space: pre-wrap; word-break: break-all;
+        margin: .35rem 0; padding: .55rem; overflow-x: auto; font-size: .75rem;
+        white-space: pre-wrap; word-break: break-all;
       }
       button {
-        font: inherit; padding: .45rem .8rem; border-radius: 8px; border: 1px solid var(--border);
-        background: var(--code-bg); color: var(--fg); cursor: pointer;
+        font: inherit; font-size: .85rem; padding: .3rem .65rem; border-radius: 8px;
+        border: 1px solid var(--border); background: var(--code-bg); color: var(--fg); cursor: pointer;
       }
+      #all { margin-top: 1rem; display: none; }
+      #all.on { display: inline-block; }
       .err { color: #d33; }
       footer { margin-top: 2.5rem; color: var(--muted); font-size: .85rem; }
+      kbd {
+        font: inherit; font-size: .85em; padding: 0 .3em; border: 1px solid var(--border);
+        border-bottom-width: 2px; border-radius: 4px; background: var(--code-bg);
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>Subir imagen</h1>
       <p class="lead">
-        Sube una foto una sola vez y usa la URL que te devuelve en el parámetro
-        <code>images</code> de <code>edit_image</code>. Así no hay que pasar la imagen en base64.
+        Sube las fotos aquí una vez y pasa las URLs al parámetro <code>images</code> de
+        <code>edit_image</code>. Los bytes viajan de tu navegador al servidor directamente, sin
+        pasar por Claude: por eso es cuestión de segundos y no de minutos.
       </p>
 
       <label for="token">Token de acceso — el valor de <code>MCP_AUTH_TOKENS</code></label>
       <input id="token" type="password" placeholder="Pégalo aquí antes de subir" autocomplete="off" />
       <p class="hint">Déjalo vacío solo si el servidor está sin autenticación (<code>MCP_AUTH_MODE=none</code>).</p>
+      <p id="saved">Token tomado del enlace y guardado en este navegador.</p>
 
-      <div id="drop" tabindex="0">Arrastra una imagen aquí o haz clic para elegirla</div>
-      <input id="file" type="file" accept="image/*" hidden />
+      <div id="drop" tabindex="0">
+        Arrastra imágenes aquí, haz clic para elegirlas, o pega con <kbd>Ctrl</kbd>+<kbd>V</kbd>
+      </div>
+      <input id="file" type="file" accept="image/*" multiple hidden />
 
       <div id="out"></div>
+      <button id="all">Copiar todas las URLs</button>
 
       <footer>
-        Formatos: PNG, JPEG, WebP, GIF. Máximo 25 MB. La URL resultante es pública pero no
-        adivinable: cualquiera que la tenga puede ver la imagen.
+        Formatos: PNG, JPEG, WebP, GIF. Máximo 25 MB por archivo. Puedes soltar varias a la vez.
+        La URL resultante no es adivinable, pero cualquiera que la tenga puede ver la imagen.
       </footer>
     </main>
 
@@ -76,11 +100,14 @@
       const fileInput = document.getElementById('file');
       const tokenInput = document.getElementById('token');
       const out = document.getElementById('out');
+      const allButton = document.getElementById('all');
+      const uploaded = [];
 
-      try {
-        const saved = localStorage.getItem('imagegen-token');
-        if (saved) tokenInput.value = saved;
-      } catch {}
+      // A bookmark of the form .../upload.html#t=<token> carries the token so there is
+      // nothing to paste. The fragment never reaches the server, and it is dropped from
+      // the address bar once stored so a screenshot of the page does not leak it.
+      readTokenFromHash();
+      restoreToken();
 
       drop.addEventListener('click', () => fileInput.click());
       drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
@@ -89,14 +116,29 @@
       drop.addEventListener('drop', (e) => {
         e.preventDefault();
         drop.classList.remove('over');
-        if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
+        uploadAll(e.dataTransfer.files);
       });
-      fileInput.addEventListener('change', () => {
-        if (fileInput.files[0]) upload(fileInput.files[0]);
+      fileInput.addEventListener('change', () => uploadAll(fileInput.files));
+      document.addEventListener('paste', (e) => {
+        const pasted = [...(e.clipboardData ? e.clipboardData.files : [])];
+        if (pasted.length) {
+          e.preventDefault();
+          uploadAll(pasted);
+        }
+      });
+      allButton.addEventListener('click', async () => {
+        await copy(uploaded.join('\n'));
+        allButton.textContent = 'Copiadas';
       });
 
+      async function uploadAll(list) {
+        const files = [...list].filter((file) => file.size > 0);
+        // Sequential: a handful of multi-megabyte POSTs at once only makes them all slower.
+        for (const file of files) await upload(file);
+      }
+
       async function upload(file) {
-        out.innerHTML = '<p>Subiendo ' + escapeHtml(file.name) + '…</p>';
+        const row = addRow(file);
         const token = tokenInput.value.trim();
         try { token ? localStorage.setItem('imagegen-token', token) : localStorage.removeItem('imagegen-token'); } catch {}
 
@@ -106,7 +148,7 @@
           const response = await fetch('/api/upload', { method: 'POST', headers, body: file });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            out.innerHTML = '<p class="err">' + escapeHtml(describeError(response.status, payload, token)) + '</p>';
+            row.fail(describeError(response.status, payload, token));
             if (response.status === 401) {
               tokenInput.classList.add('needed');
               tokenInput.focus();
@@ -114,18 +156,82 @@
             return;
           }
           tokenInput.classList.remove('needed');
-          out.innerHTML =
-            '<p>Listo. Pasa esta URL al parámetro <code>images</code>:</p>' +
-            '<pre id="url">' + escapeHtml(payload.url) + '</pre>' +
-            '<button id="copy">Copiar URL</button> ' +
-            '<a href="' + escapeHtml(payload.url) + '" target="_blank" rel="noopener">Ver imagen</a>';
-          document.getElementById('copy').addEventListener('click', async () => {
-            await navigator.clipboard.writeText(payload.url);
-            document.getElementById('copy').textContent = 'Copiada';
-          });
+          uploaded.push(payload.url);
+          allButton.classList.toggle('on', uploaded.length > 1);
+          // One image is the common case: put its URL straight on the clipboard so the
+          // next step is a single paste into Claude.
+          const copied = uploaded.length === 1 && (await copy(payload.url));
+          row.done(payload.url, copied);
         } catch (error) {
-          out.innerHTML = '<p class="err">' + escapeHtml(String(error)) + '</p>';
+          row.fail(String(error));
         }
+      }
+
+      function addRow(file) {
+        const item = document.createElement('div');
+        item.className = 'item';
+        const preview = document.createElement('img');
+        preview.alt = '';
+        const url = URL.createObjectURL(file);
+        preview.src = url;
+        preview.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+        const body = document.createElement('div');
+        body.className = 'body';
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = file.name || 'imagen pegada';
+        const status = document.createElement('div');
+        status.textContent = 'Subiendo…';
+        body.append(name, status);
+        item.append(preview, body);
+        out.append(item);
+
+        return {
+          fail(message) {
+            status.className = 'err';
+            status.textContent = message;
+          },
+          done(uploadedUrl, copied) {
+            status.remove();
+            const code = document.createElement('pre');
+            code.textContent = uploadedUrl;
+            const button = document.createElement('button');
+            button.textContent = copied ? 'Copiada ✓' : 'Copiar URL';
+            button.addEventListener('click', async () => {
+              button.textContent = (await copy(uploadedUrl)) ? 'Copiada ✓' : 'No se pudo copiar';
+            });
+            const link = document.createElement('a');
+            link.href = uploadedUrl;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = 'Ver imagen';
+            body.append(code, button, document.createTextNode(' '), link);
+          },
+        };
+      }
+
+      async function copy(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function readTokenFromHash() {
+        const fromHash = new URLSearchParams(location.hash.slice(1)).get('t');
+        if (!fromHash) return;
+        try { localStorage.setItem('imagegen-token', fromHash); } catch {}
+        document.getElementById('saved').classList.add('on');
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+
+      function restoreToken() {
+        try {
+          const saved = localStorage.getItem('imagegen-token');
+          if (saved) tokenInput.value = saved;
+        } catch {}
       }
 
       function describeError(status, payload, token) {
@@ -141,10 +247,6 @@
           return detail || 'El servidor no tiene almacenamiento configurado para las subidas.';
         }
         return detail || ('Error ' + status);
-      }
-
-      function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
       }
     </script>
   </body>

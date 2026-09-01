@@ -5,6 +5,10 @@
   "outputDirectory": "web",
   "rewrites": [
     {
+      "source": "/u",
+      "destination": "/upload.html"
+    },
+    {
       "source": "/mcp",
       "destination": "/api/mcp"
     },

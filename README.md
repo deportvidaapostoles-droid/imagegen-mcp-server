@@ -424,9 +424,20 @@ curl -X POST --data-binary @photo.png \
 Pass that `url` in `images`. Once a Blob store is connected the server also
 advertises an **`upload_image` tool**, so the client can do this itself: hand it
 the base64 once, get a URL back, and reuse that URL across every edit of the
-same photo instead of re-sending the image on each call. There is also a
-drag-and-drop page at `/upload.html` for when neither is convenient. Uploads accept PNG, JPEG,
-WebP and GIF up to 25 MB and require the same authentication as `/mcp`.
+same photo instead of re-sending the image on each call.
+
+`upload_image` is the slow path, though. The base64 has to be emitted token by
+token as a tool argument, which for a multi-megabyte photo takes minutes and is
+where the truncation above comes from. The **drag-and-drop page at `/u`** (also
+`/upload.html`) avoids it entirely: the browser POSTs the bytes straight to
+`/api/upload`, so a photo lands in seconds. Drop files on it, pick them, or
+paste from the clipboard; it uploads several at a time and puts the resulting
+URL on your clipboard, ready to paste into the client.
+
+Bookmark it as `https://<your-project>.vercel.app/u#t=<your MCP_AUTH_TOKENS value>`
+and the token fills itself in — the fragment is stored in the browser and never
+sent to the server. Uploads accept PNG, JPEG, WebP and GIF up to 25 MB and
+require the same authentication as `/mcp`.
 
 The URL you get back depends on how the Blob store was created:
 
