@@ -86,3 +86,61 @@ describe('private blob stores', () => {
     expect(result.url).toContain('signature=zzz');
   });
 });
+
+describe('reading images back from our own store', () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.doUnmock('@vercel/blob');
+  });
+
+  const env = { BLOB_READ_WRITE_TOKEN: 'tok' } as NodeJS.ProcessEnv;
+  const streamOf = (bytes: Buffer) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(bytes));
+        controller.close();
+      },
+    });
+
+  it('leaves someone else’s host alone', async () => {
+    const { readStoredImage } = await import('./uploads.js');
+    await expect(readStoredImage('https://example.com/photo.png', env)).resolves.toBeNull();
+  });
+
+  it('does nothing when no store is connected', async () => {
+    const { readStoredImage } = await import('./uploads.js');
+    await expect(
+      readStoredImage('https://x.private.blob.vercel-storage.com/a.png', {} as NodeJS.ProcessEnv)
+    ).resolves.toBeNull();
+  });
+
+  it('reads a private blob with the token, ignoring the signature in the query', async () => {
+    const get = vi.fn(async () => ({
+      statusCode: 200,
+      stream: streamOf(Buffer.from('stored-bytes')),
+      headers: new Headers({ 'content-type': 'image/jpeg' }),
+    }));
+    vi.doMock('@vercel/blob', () => ({ get }));
+    const { readStoredImage } = await import('./uploads.js');
+
+    const result = await readStoredImage(
+      'https://x.private.blob.vercel-storage.com/imagegen/a.png?vercel-blob-signature=zzz',
+      env
+    );
+
+    expect(get).toHaveBeenCalledWith('https://x.private.blob.vercel-storage.com/imagegen/a.png', {
+      access: 'private',
+      token: 'tok',
+    });
+    expect(Buffer.from(result!.data, 'base64').toString()).toBe('stored-bytes');
+    expect(result!.mimeType).toBe('image/jpeg');
+  });
+
+  it('reports a blob that is gone rather than returning nothing', async () => {
+    vi.doMock('@vercel/blob', () => ({ get: vi.fn(async () => null) }));
+    const { readStoredImage } = await import('./uploads.js');
+    await expect(
+      readStoredImage('https://x.private.blob.vercel-storage.com/imagegen/gone.png', env)
+    ).rejects.toThrow(/no longer available/);
+  });
+});

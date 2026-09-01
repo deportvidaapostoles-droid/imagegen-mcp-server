@@ -113,4 +113,46 @@ async function putPrivate(pathname, body, contentType, env) {
         expiresAt: new Date(validUntil).toISOString(),
     };
 }
+/**
+ * Read an image back out of this deployment's own Blob store.
+ *
+ * The image providers never fetch the URL themselves — this server does, then
+ * inlines the bytes — so a blob in a private store is best read with the store
+ * token rather than a signed link, which can expire or be mangled in transit.
+ * Returns null when the URL belongs to someone else's host, leaving the caller
+ * to fetch it as an ordinary public image.
+ */
+export async function readStoredImage(url, env = process.env) {
+    if (!isUploadConfigured(env))
+        return null;
+    let parsed;
+    try {
+        parsed = new URL(url);
+    }
+    catch {
+        return null;
+    }
+    if (!parsed.hostname.endsWith(".blob.vercel-storage.com"))
+        return null;
+    const access = parsed.hostname.includes(".private.") ? "private" : "public";
+    // The signature lives in the query string; the token authenticates us instead.
+    const canonical = `${parsed.origin}${parsed.pathname}`;
+    const { get } = await import("@vercel/blob");
+    const result = await get(canonical, { access, token: env.BLOB_READ_WRITE_TOKEN });
+    if (!result || result.statusCode !== 200 || !result.stream) {
+        throw new Error(`The stored image is no longer available: ${parsed.pathname}`);
+    }
+    const chunks = [];
+    const reader = result.stream.getReader();
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done)
+            break;
+        if (value)
+            chunks.push(Buffer.from(value));
+    }
+    const body = Buffer.concat(chunks);
+    const mimeType = (result.headers.get("content-type") || "image/png").split(";")[0].trim();
+    return { data: body.toString("base64"), mimeType };
+}
 //# sourceMappingURL=uploads.js.map
