@@ -16,7 +16,7 @@ export const SERVER_NAME = "imagegen-mcp-server";
 export const SERVER_VERSION = "0.3.0";
 export function createMcpServer(config, options = {}) {
     const log = options.log ?? (() => { });
-    const service = new ImageService(config);
+    const service = new ImageService(config, log);
     const taskStore = new TaskStore(service, {
         maxRetries: config.maxRetries,
         taskTimeout: config.taskTimeout,
