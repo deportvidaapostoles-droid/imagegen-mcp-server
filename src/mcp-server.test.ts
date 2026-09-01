@@ -1,13 +1,60 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { getServerRuntimeConfig } from './config.js';
-import { createMcpServer } from './mcp-server.js';
-import { healthPayload, readJsonBody } from './http-transport.js';
+import { buildInstructions, createMcpServer } from './mcp-server.js';
+import { handleMcpRequest, healthPayload, readJsonBody } from './http-transport.js';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
 
 function configWith(env: Record<string, string>) {
   return getServerRuntimeConfig([], env as NodeJS.ProcessEnv);
 }
+
+describe('buildInstructions', () => {
+  it('names the deployment upload page so the model can link to it', () => {
+    const instructions = buildInstructions('https://example.vercel.app/u');
+    expect(instructions).toContain('https://example.vercel.app/u');
+    expect(instructions).toMatch(/do not read the file|Do not read an image file/i);
+  });
+
+  it('falls back to naming the route when the transport does not know the origin', () => {
+    expect(buildInstructions()).toContain("the server's /u page");
+  });
+
+  it('reaches a real client through the HTTP transport, pointing at this deployment', async () => {
+    const config = configWith({ OPENAI_API_KEY: 'sk-test-key' });
+    const httpServer = createServer((req, res) => {
+      void handleMcpRequest(req as never, res, config, { log: () => {} });
+    });
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const { port } = httpServer.address() as AddressInfo;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            clientInfo: { name: 'test-client', version: '1.0.0' },
+          },
+        }),
+      });
+      const raw = await response.text();
+      // The transport answers as SSE; the JSON-RPC message rides on a data: line.
+      const line = raw.split('\n').find((entry) => entry.startsWith('data:')) ?? raw;
+      const message = JSON.parse(line.replace(/^data:\s*/, ''));
+      expect(message.result.instructions).toContain(`http://127.0.0.1:${port}/u`);
+    } finally {
+      await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    }
+  });
+});
 
 describe('createMcpServer', () => {
   it('exposes the sync and async tools when the provider is configured', () => {

@@ -34,6 +34,44 @@ export interface McpServerBundle {
 export interface CreateMcpServerOptions {
   /** Optional logger; defaults to a no-op so stdio transport stays clean. */
   log?: (...args: unknown[]) => void;
+  /**
+   * Absolute URL of the drag-and-drop upload page, when the transport knows it.
+   * Named in the server instructions so the model can send the user somewhere
+   * concrete instead of describing an upload in the abstract.
+   */
+  uploadPageUrl?: string;
+}
+
+/**
+ * Instructions handed to the client at `initialize`.
+ *
+ * The failure this heads off is specific and expensive: asked to edit a photo,
+ * a model reads the file and inlines it as base64 in the tool call. Emitting a
+ * megabyte of base64 one token at a time takes minutes and frequently truncates,
+ * which the provider then reports as `Base64 decoding failed`. Saying so plainly
+ * here is cheaper than every client rediscovering it.
+ */
+export function buildInstructions(uploadPageUrl?: string): string {
+  const uploadPage = uploadPageUrl ?? "the server's /u page";
+  const lines = [
+    "Generates and edits images through a hosted image model.",
+    "",
+    "How to give this server an image to edit:",
+    "",
+    `1. An https:// URL is always the right answer. Pass it in \`images\` as is — no download, no re-encoding.`,
+    `2. If the user has the image on their own machine, send them to ${uploadPage} to drop it there, and ask them to paste back the URL it returns. This takes them seconds.`,
+    "3. Reuse that URL for every later edit of the same photo. Do not upload it again.",
+    "",
+    "Never do these, they do not work:",
+    "",
+    "- Do not pass a local file path (`/mnt/...`, `C:\\...`, `~/...`). This server runs remotely and shares no filesystem with the user or with you; a path always fails with ENOENT.",
+    "- Do not read an image file and inline it as base64 in `images`. Writing out a multi-megabyte base64 string takes minutes and gets truncated on the way, which surfaces as a decoding error from the provider.",
+    "",
+    "`upload_image` exists for the case where you already hold small image bytes (roughly under 1 MB) and no browser is involved. For anything larger, the upload page is faster and more reliable — prefer it and say so to the user rather than attempting the base64.",
+    "",
+    "`generate_image` and `edit_image` block until the image is ready. Use `submit_task` plus `get_task` instead when a call would otherwise outlive the client's timeout.",
+  ];
+  return lines.join("\n");
 }
 
 export function createMcpServer(
@@ -58,7 +96,7 @@ export function createMcpServer(
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } }
+    { capabilities: { tools: {} }, instructions: buildInstructions(options.uploadPageUrl) }
   );
 
   // The tools are always advertised, even without provider credentials: an

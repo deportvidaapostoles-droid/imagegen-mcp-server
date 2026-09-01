@@ -10,6 +10,8 @@ export function createTools(provider, defaultTimeout) {
     const imageDesc = "An image to edit. Preferred: a public https:// URL of the image — this is the only reliable way to send a large image to a remote server. " +
         "Also accepted: a base64-encoded string (optionally as a data URL like data:image/png;base64,...), or an absolute file path " +
         "(/path/to/image.png), which only works when the server runs on the same machine as the caller. " +
+        "Do not read a local image file and inline it here: writing out a multi-megabyte base64 string takes minutes and is " +
+        "truncated in transit, which the provider reports as a decoding error. Ask the user to upload it and paste back the URL instead. " +
         "Supported formats: PNG, JPEG, WebP.";
     const imagesNote = provider === "openai"
         ? " Multiple images are supported for multi-image editing."
@@ -142,18 +144,21 @@ export function createTools(provider, defaultTimeout) {
  */
 export const UPLOAD_IMAGE_TOOL = {
     name: "upload_image",
-    description: "Upload an image to this server and get back a public https:// URL. " +
-        "Use this FIRST when you have an image to edit: pass the base64 once here, then hand the returned URL " +
-        "to edit_image or submit_task — including across several edits of the same photo. " +
-        "This server runs remotely and cannot read files on your machine, so a file path never works; " +
-        "inlining a large base64 string in every call is unreliable because it gets truncated in transit.",
+    description: "Store image bytes you already hold and get back an https:// URL to pass to edit_image or submit_task, " +
+        "reusable across several edits of the same photo. " +
+        "Only worth it for a small image (roughly under 1 MB): the base64 has to be written out one token at a time, " +
+        "so a larger photo takes minutes here and is likely to be truncated on the way. " +
+        "When the image is on the user's own machine, do not use this tool and do not read the file — " +
+        "send the user to this server's /u page to drop it there and paste back the URL it returns. " +
+        "A file path never works: the server runs remotely and shares no filesystem with the caller.",
     inputSchema: {
         type: "object",
         properties: {
             image: {
                 type: "string",
                 description: "The image as a base64-encoded string, or a data URL (data:image/png;base64,...). " +
-                    "Keep it small — resize or re-encode to JPEG first if the original is several megabytes.",
+                    "Keep it small — resize or re-encode to JPEG first if the original is several megabytes, " +
+                    "or use the /u upload page instead. An https:// URL is passed straight back, unchanged.",
             },
             mime_type: {
                 type: "string",

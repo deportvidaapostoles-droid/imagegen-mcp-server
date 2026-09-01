@@ -14,6 +14,37 @@ import { isUploadConfigured, storeImage } from "./uploads.js";
 import { createErrorResponse, formatErrorMessage } from "./utils.js";
 export const SERVER_NAME = "imagegen-mcp-server";
 export const SERVER_VERSION = "0.3.0";
+/**
+ * Instructions handed to the client at `initialize`.
+ *
+ * The failure this heads off is specific and expensive: asked to edit a photo,
+ * a model reads the file and inlines it as base64 in the tool call. Emitting a
+ * megabyte of base64 one token at a time takes minutes and frequently truncates,
+ * which the provider then reports as `Base64 decoding failed`. Saying so plainly
+ * here is cheaper than every client rediscovering it.
+ */
+export function buildInstructions(uploadPageUrl) {
+    const uploadPage = uploadPageUrl ?? "the server's /u page";
+    const lines = [
+        "Generates and edits images through a hosted image model.",
+        "",
+        "How to give this server an image to edit:",
+        "",
+        `1. An https:// URL is always the right answer. Pass it in \`images\` as is — no download, no re-encoding.`,
+        `2. If the user has the image on their own machine, send them to ${uploadPage} to drop it there, and ask them to paste back the URL it returns. This takes them seconds.`,
+        "3. Reuse that URL for every later edit of the same photo. Do not upload it again.",
+        "",
+        "Never do these, they do not work:",
+        "",
+        "- Do not pass a local file path (`/mnt/...`, `C:\\...`, `~/...`). This server runs remotely and shares no filesystem with the user or with you; a path always fails with ENOENT.",
+        "- Do not read an image file and inline it as base64 in `images`. Writing out a multi-megabyte base64 string takes minutes and gets truncated on the way, which surfaces as a decoding error from the provider.",
+        "",
+        "`upload_image` exists for the case where you already hold small image bytes (roughly under 1 MB) and no browser is involved. For anything larger, the upload page is faster and more reliable — prefer it and say so to the user rather than attempting the base64.",
+        "",
+        "`generate_image` and `edit_image` block until the image is ready. Use `submit_task` plus `get_task` instead when a call would otherwise outlive the client's timeout.",
+    ];
+    return lines.join("\n");
+}
 export function createMcpServer(config, options = {}) {
     const log = options.log ?? (() => { });
     const service = new ImageService(config, log);
@@ -29,7 +60,7 @@ export function createMcpServer(config, options = {}) {
     const tools = config.asyncOnly
         ? [...uploadTools, ...asyncTools]
         : [...uploadTools, ...asyncTools, ...syncTools];
-    const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} } });
+    const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { tools: {} }, instructions: buildInstructions(options.uploadPageUrl) });
     // The tools are always advertised, even without provider credentials: an
     // empty list looks to a client like a broken server, while a call that
     // explains the missing API key is actionable.

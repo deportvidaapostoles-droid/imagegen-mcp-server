@@ -173,7 +173,12 @@ export async function handleMcpRequest(req, res, config, options = {}) {
     if (authInfo) {
         req.auth = authInfo;
     }
-    const { server } = createMcpServer(config, { log });
+    // The instructions name the upload page, so the model can point the user at a
+    // real link rather than describing an upload in the abstract.
+    const { server } = createMcpServer(config, {
+        log,
+        uploadPageUrl: `${resolveBaseUrl(req, authConfig)}/u`,
+    });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     const dispose = () => {
         void transport.close().catch(() => { });
