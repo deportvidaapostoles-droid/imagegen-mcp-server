@@ -41,7 +41,7 @@ export function createMcpServer(
   options: CreateMcpServerOptions = {}
 ): McpServerBundle {
   const log = options.log ?? (() => {});
-  const service = new ImageService(config);
+  const service = new ImageService(config, log);
   const taskStore = new TaskStore(service, {
     maxRetries: config.maxRetries,
     taskTimeout: config.taskTimeout,

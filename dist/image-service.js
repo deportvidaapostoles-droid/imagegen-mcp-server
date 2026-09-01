@@ -9,12 +9,24 @@ import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { validateDallE2Params, validateDallE3Params, validateGeminiParams, validateGptImageParams, validateOpenAICompatibleImageParams, } from "./providers.js";
 import { openAIImageToBase64, parseImageInput } from "./utils.js";
+/** Attempts per request when the provider reports it is busy. */
+const MAX_TRANSIENT_ATTEMPTS = 3;
+/** Upstream hiccups worth a second try: the provider is busy, not the request wrong. */
+function isTransientUpstreamError(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return /\b(429|500|502|503|504)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|INTERNAL|high demand|overloaded|try again later|temporarily/i.test(message);
+}
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 export class ImageService {
     provider;
     model;
     openai = null;
     gemini = null;
-    constructor(config) {
+    log;
+    constructor(config, log = () => { }) {
+        this.log = log;
         this.provider = config.provider;
         this.model = config.model;
         if (config.provider === "openai" && config.openaiApiKey) {
@@ -43,12 +55,33 @@ export class ImageService {
             : "Gemini client not initialized. Please set GEMINI_API_KEY.";
     }
     async generate(params) {
-        return this.provider === "openai"
-            ? this.openaiGenerate(params)
-            : this.geminiGenerate(params);
+        return this.withRetry(params.timeout, () => this.provider === "openai" ? this.openaiGenerate(params) : this.geminiGenerate(params));
     }
     async edit(params) {
-        return this.provider === "openai" ? this.openaiEdit(params) : this.geminiEdit(params);
+        return this.withRetry(params.timeout, () => this.provider === "openai" ? this.openaiEdit(params) : this.geminiEdit(params));
+    }
+    /**
+     * Retry a request the provider refused because it was busy, while the caller's
+     * own timeout still has room. A saturated image model answers 503 within a
+     * second, so a short pause often costs less than surfacing the failure.
+     */
+    async withRetry(budgetMs, run) {
+        const deadline = Date.now() + budgetMs;
+        for (let attempt = 1;; attempt += 1) {
+            try {
+                return await run();
+            }
+            catch (error) {
+                const backoff = 1500 * attempt;
+                if (attempt >= MAX_TRANSIENT_ATTEMPTS ||
+                    !isTransientUpstreamError(error) ||
+                    Date.now() + backoff >= deadline) {
+                    throw error;
+                }
+                this.log(`Provider busy (attempt ${attempt}/${MAX_TRANSIENT_ATTEMPTS}), retrying in ${backoff} ms`);
+                await sleep(backoff);
+            }
+        }
     }
     // ── OpenAI ────────────────────────────────────────────────────────────────
     async openaiGenerate(params) {
