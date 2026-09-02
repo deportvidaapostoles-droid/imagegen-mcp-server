@@ -171,6 +171,33 @@ function secretsMatch(a: string, b: string): boolean {
  * parameter, or the last path segment (`/mcp/<secret>`) — the only option for
  * clients that cannot send custom headers.
  */
+/**
+ * A credential that authorizes uploads and nothing else.
+ *
+ * The upload page is opened by shop staff on their phones, and asking them to
+ * paste a secret is the one step they reliably get wrong. Setting
+ * UPLOAD_PAGE_TOKEN lets the page carry its own credential — but the page is
+ * public, so whatever it carries is public too. Keeping this separate from
+ * MCP_AUTH_TOKENS is what stops that from also handing out the MCP server:
+ * this token is accepted by /api/upload and by nothing else.
+ */
+export function getUploadPageToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const token = (env.UPLOAD_PAGE_TOKEN ?? "").trim();
+  return token.length > 0 ? token : undefined;
+}
+
+/** True when the request presents the upload-only credential. */
+export function matchesUploadPageToken(
+  headers: IncomingHttpHeaders,
+  url: URL | undefined,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  const expected = getUploadPageToken(env);
+  if (!expected) return false;
+  const presented = extractStaticSecret(headers, url);
+  return Boolean(presented && secretsMatch(expected, presented));
+}
+
 export function extractStaticSecret(
   headers: IncomingHttpHeaders,
   url: URL | undefined,

@@ -4,15 +4,19 @@
  * Public route: GET https://<deployment>/api/sources
  *
  * The upload page needs the same list the `recent_uploads` tool offers, so both
- * read it from UPLOAD_SOURCES rather than each keeping its own copy. This route
- * is deliberately unauthenticated: it returns only the labels an operator chose
- * to show on a page that is itself public, and the page must be able to render
- * its picker before anyone has typed a token.
+ * read it from UPLOAD_SOURCES rather than each keeping its own copy, plus the
+ * upload-only credential that saves shop staff from ever seeing a token.
+ *
+ * This route is unauthenticated by necessity: the page has to configure itself
+ * before anyone could have authenticated. `uploadToken` is therefore public --
+ * that is exactly why it is UPLOAD_PAGE_TOKEN and never MCP_AUTH_TOKENS. It
+ * lets a stranger who finds this deployment store images, and nothing else.
  */
 
 import type { ServerResponse } from "node:http";
 import { loadDotEnv } from "../src/config.js";
 import { applyCorsHeaders, writeJson, type NodeRequest } from "../src/http-transport.js";
+import { getUploadPageToken } from "../src/auth.js";
 import { getUploadSources } from "../src/uploads.js";
 
 loadDotEnv();
@@ -30,5 +34,8 @@ export default function handler(req: NodeRequest, res: ServerResponse): void {
     return;
   }
 
-  writeJson(res, 200, { sources: getUploadSources().map((source) => source.label) });
+  writeJson(res, 200, {
+    sources: getUploadSources().map((source) => source.label),
+    uploadToken: getUploadPageToken() ?? null,
+  });
 }

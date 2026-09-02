@@ -4,188 +4,188 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
-    <meta name="theme-color" content="#6d2350" />
+    <meta name="theme-color" content="#000000" />
     <title>Subir foto</title>
     <style>
-      /* System fonts on purpose: this page opens on a phone, often on shop
-         wifi, and a webfont round trip is the slowest thing about it. */
+      /* System fonts on purpose: this opens on a phone, often on shop wifi,
+         and a webfont round trip is the slowest thing about the page. */
       :root {
-        --ground: #faf9f8;
-        --surface: #ffffff;
-        --ink: #1a1a19;
-        --muted: #6a6a72;
-        --line: #e4e2e6;
-        --line-strong: #c8c5cc;
-        --accent: #6d2350;
-        --accent-ink: #ffffff;
-        --accent-soft: #f6ecf3;
-        --ok: #17784b;
-        --bad: #b3261e;
+        --paper: #ffffff;
+        --ink: #000000;
+        --ink-2: #6b6b6b;
+        --ink-3: #9a9a9a;
+        --rule: #e0e0e0;
+        --rule-2: #cccccc;
+        --wash: #f5f5f5;
         --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme="light"]) {
-          --ground: #131215;
-          --surface: #1c1a1f;
-          --ink: #eceaee;
-          --muted: #a09da8;
-          --line: #2c2930;
-          --line-strong: #453f4a;
-          --accent: #e491c2;
-          --accent-ink: #2a0d1f;
-          --accent-soft: #2a1c25;
-          --ok: #5cc48e;
-          --bad: #f2837a;
+          --paper: #000000;
+          --ink: #ffffff;
+          --ink-2: #a0a0a0;
+          --ink-3: #6e6e6e;
+          --rule: #262626;
+          --rule-2: #3d3d3d;
+          --wash: #131313;
         }
+      }
+      :root[data-theme="dark"] {
+        --paper: #000000; --ink: #ffffff; --ink-2: #a0a0a0; --ink-3: #6e6e6e;
+        --rule: #262626; --rule-2: #3d3d3d; --wash: #131313;
       }
 
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
       body {
         margin: 0;
-        padding: 1.5rem 1rem calc(2rem + env(safe-area-inset-bottom));
-        background: var(--ground);
+        padding: 2rem 1.25rem calc(2.5rem + env(safe-area-inset-bottom));
+        background: var(--paper);
         color: var(--ink);
-        font: 400 16px/1.5 var(--sans);
+        font: 400 16px/1.45 var(--sans);
+        -webkit-font-smoothing: antialiased;
       }
-      main { max-width: 30rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; }
+      main { max-width: 28rem; margin: 0 auto; }
 
-      h1 { margin: 0; font-size: 1.5rem; font-weight: 650; letter-spacing: -.02em; }
-      .sub { margin: .2rem 0 0; color: var(--muted); font-size: .92rem; }
+      h1 { margin: 0; font-size: 1.75rem; font-weight: 600; letter-spacing: -.03em; }
+      .lede { margin: .35rem 0 0; color: var(--ink-2); font-size: .95rem; }
 
-      .field { display: flex; flex-direction: column; gap: .5rem; }
-      .label { font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-
-      /* Choosing the shop must happen before the photo, so it sits first and
-         reads as a switch rather than a form field. */
-      #places { display: flex; gap: .5rem; flex-wrap: wrap; }
-      #places button {
-        flex: 1 1 8rem; min-height: 3rem; padding: .6rem .8rem;
-        border: 1.5px solid var(--line-strong); border-radius: 12px;
-        background: var(--surface); color: var(--ink);
-        font: 500 .95rem/1.2 var(--sans); cursor: pointer;
+      /* Each step is numbered because the order is real: the shop decides where
+         the photo is filed, so it cannot be answered after the fact. */
+      .step { margin-top: 2.25rem; }
+      .step[hidden] { display: none; }
+      .step-head { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .85rem; }
+      .n {
+        flex: none; width: 1.35rem; height: 1.35rem; border-radius: 50%;
+        border: 1.5px solid var(--ink); color: var(--ink);
+        font: 600 .75rem/1.2rem var(--sans); text-align: center;
       }
-      #places button[aria-pressed="true"] {
-        background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
+      .step.done .n { background: var(--ink); color: var(--paper); }
+      .step h2 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -.01em; }
+      .step .said { margin-left: auto; font-size: .85rem; color: var(--ink-2); }
+
+      .choices { display: grid; gap: .55rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+      .choices button {
+        min-height: 3.25rem; padding: .7rem .9rem; cursor: pointer;
+        border: 1.5px solid var(--rule-2); border-radius: 2px;
+        background: var(--paper); color: var(--ink);
+        font: 500 1rem/1.2 var(--sans); text-align: left;
+      }
+      .choices button[aria-pressed="true"] {
+        background: var(--ink); border-color: var(--ink); color: var(--paper); font-weight: 600;
       }
 
-      .actions { display: flex; flex-direction: column; gap: .6rem; }
-      .big {
-        display: flex; align-items: center; justify-content: center; gap: .6rem;
-        min-height: 3.5rem; border-radius: 14px; border: 1.5px solid var(--line-strong);
-        background: var(--surface); color: var(--ink);
-        font: 600 1.05rem/1 var(--sans); cursor: pointer;
+      .acts { display: grid; gap: .55rem; }
+      .act {
+        display: flex; align-items: center; gap: .75rem;
+        min-height: 3.5rem; padding: 0 1.1rem; cursor: pointer;
+        border: 1.5px solid var(--ink); border-radius: 2px;
+        background: var(--paper); color: var(--ink);
+        font: 500 1.05rem/1 var(--sans);
       }
-      .big.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-      .big:disabled { opacity: .45; cursor: not-allowed; }
-      .big svg { width: 1.25rem; height: 1.25rem; flex: none; }
-      button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .act.solid { background: var(--ink); color: var(--paper); }
+      .act svg { width: 1.3rem; height: 1.3rem; flex: none; }
+      button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-      /* Dropping files is a desktop affordance; on a phone it only takes space. */
       #drop {
-        display: none; padding: 1.5rem; text-align: center; color: var(--muted);
-        border: 1.5px dashed var(--line-strong); border-radius: 14px; font-size: .9rem;
+        display: none; margin-top: .55rem; padding: 1.1rem; text-align: center;
+        border: 1.5px dashed var(--rule-2); border-radius: 2px;
+        color: var(--ink-2); font-size: .9rem;
       }
-      #drop.over { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
+      #drop.over { border-color: var(--ink); color: var(--ink); background: var(--wash); }
       @media (hover: hover) and (pointer: fine) { #drop { display: block; } }
 
-      details { border-top: 1px solid var(--line); padding-top: .9rem; }
-      summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
-      #guide ol { margin: .7rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .45rem; font-size: .92rem; }
-      #guide .tip { margin: .8rem 0 0; font-size: .88rem; color: var(--muted); }
-      input[type="password"] {
-        width: 100%; margin-top: .6rem; padding: .75rem; font: inherit;
-        border: 1.5px solid var(--line-strong); border-radius: 10px;
-        background: var(--surface); color: var(--ink);
-      }
-      input.needed { border-color: var(--bad); }
+      .say { margin-top: .85rem; padding: .7rem .85rem; border-left: 3px solid var(--ink); background: var(--wash); font-size: .9rem; }
+      .say[hidden] { display: none; }
 
-      .note {
-        display: none; padding: .8rem .9rem; border-radius: 12px; font-size: .9rem;
-        background: var(--surface); border: 1.5px solid var(--line);
-      }
-      .note.on { display: block; }
-      .note.bad { border-color: var(--bad); color: var(--bad); }
+      .shot { display: grid; grid-template-columns: 3.25rem 1fr; gap: .85rem; padding: 1rem 0; border-top: 1px solid var(--rule); }
+      .shot img { width: 3.25rem; height: 3.25rem; object-fit: cover; border-radius: 2px; background: var(--wash); }
+      .shot .col { min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
+      .shot .top { display: flex; justify-content: space-between; gap: .6rem; align-items: baseline; }
+      .shot .who { font-size: .95rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tag { flex: none; font: 600 .7rem/1 var(--sans); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); }
+      .tag.ok { color: var(--ink); }
+      .tag.bad { color: var(--ink); border-bottom: 2px solid var(--ink); padding-bottom: 2px; }
+      .facts { font: 400 .76rem/1.4 var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+      .why { font-size: .88rem; }
+      .link { display: flex; align-items: center; gap: .9rem; font-size: .85rem; }
+      .link a { color: var(--ink); }
+      .link button { border: 0; padding: 0; background: none; color: var(--ink-2); font: inherit; text-decoration: underline; cursor: pointer; }
 
-      #shots { display: flex; flex-direction: column; }
-      .shot { display: grid; grid-template-columns: 3.5rem 1fr; gap: .8rem; padding: .9rem 0; border-top: 1px solid var(--line); }
-      .shot img { width: 3.5rem; height: 3.5rem; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
-      .shot .col { min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
-      .shot .top { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
-      .shot .who { font-size: .9rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .state { flex: none; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-      .state.ok { color: var(--ok); }
-      .state.bad { color: var(--bad); }
-      .facts { font: 400 .78rem/1.45 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-      .why { font-size: .86rem; color: var(--bad); }
-      .link { display: flex; align-items: center; gap: .75rem; font-size: .86rem; }
-      .link a { color: var(--accent); }
-      .link button {
-        font: 500 .8rem/1 var(--sans); padding: .35rem .6rem; border-radius: 8px;
-        border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer;
+      details { margin-top: 2.25rem; border-top: 1px solid var(--rule); padding-top: 1rem; }
+      summary { cursor: pointer; color: var(--ink-2); font-size: .9rem; }
+      details ol { margin: .9rem 0 0; padding-left: 1.15rem; display: grid; gap: .5rem; font-size: .93rem; }
+      details .tip { margin: .9rem 0 0; color: var(--ink-2); font-size: .88rem; }
+      #tokenBox input {
+        width: 100%; margin-top: .7rem; padding: .75rem; font: inherit;
+        border: 1.5px solid var(--rule-2); border-radius: 2px;
+        background: var(--paper); color: var(--ink);
       }
+      #tokenBox[hidden] { display: none; }
 
-      footer { color: var(--muted); font-size: .84rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+      footer { margin-top: 2.25rem; border-top: 1px solid var(--rule); padding-top: 1rem; color: var(--ink-2); font-size: .82rem; }
       @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
   </head>
   <body>
     <main>
-      <header>
-        <h1>Subir foto</h1>
-        <p class="sub">
-          Sacá la foto o elegila de la galería. Después, en Claude, pedile
-          <em>“las últimas fotos que subí”</em> y las encuentra solo.
-        </p>
-      </header>
+      <h1>Subir foto</h1>
+      <p class="lede">Después, en Claude, pedile <em>“las últimas fotos que subí”</em>.</p>
 
-      <div class="field" id="placesField" hidden>
-        <span class="label" id="placesLabel">¿Para cuál comercio?</span>
-        <div id="places" role="group" aria-labelledby="placesLabel"></div>
-      </div>
+      <section class="step" id="stepPlace" hidden>
+        <div class="step-head">
+          <span class="n">1</span>
+          <h2>¿De qué comercio?</h2>
+          <span class="said" id="placeSaid"></span>
+        </div>
+        <div class="choices" id="places" role="group" aria-label="Comercio"></div>
+      </section>
 
-      <div class="actions">
-        <button type="button" class="big primary" id="shoot">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 7h3l1.5-2h7L17 7h3v12H4z" /><circle cx="12" cy="13" r="3.5" />
-          </svg>
-          Sacar foto
-        </button>
-        <button type="button" class="big" id="pick">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.6" /><path d="m4 17 5-5 4 4 3-2 4 4" />
-          </svg>
-          Elegir de la galería
-        </button>
-        <div id="drop">…o arrastrá las imágenes hasta acá</div>
-      </div>
+      <section class="step" id="stepPhoto">
+        <div class="step-head">
+          <span class="n" id="photoN">2</span>
+          <h2 id="photoTitle">La foto</h2>
+        </div>
+        <div class="acts">
+          <button type="button" class="act solid" id="shoot">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 7h3l1.5-2h7L17 7h3v12H4z" /><circle cx="12" cy="13" r="3.5" />
+            </svg>
+            Sacar foto
+          </button>
+          <button type="button" class="act" id="pick">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="1" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m4 17 5-5 4 4 3-2 4 4" />
+            </svg>
+            Elegir de la galería
+          </button>
+          <div id="drop">o arrastrá las imágenes hasta acá</div>
+        </div>
+      </section>
 
       <input id="camera" type="file" accept="image/*" capture="environment" hidden />
       <input id="gallery" type="file" accept="image/*" multiple hidden />
 
-      <div id="note" class="note"></div>
+      <p class="say" id="say" hidden></p>
       <div id="shots"></div>
 
       <details id="guide">
         <summary>¿Cómo se usa?</summary>
         <ol>
           <li>Elegí el comercio y sacá la foto. Podés subir varias de una.</li>
-          <li>Volvé a Claude y decile <em>“ya subí las fotos”</em>. Las busca solo, no hace falta copiar nada.</li>
-          <li>Pedile lo que querés: <em>“hacé una historia 9:16 con fondo limpio”</em>, o <em>“un cuadrado para el feed”</em>.</li>
+          <li>Volvé a Claude y decile <em>“ya subí las fotos”</em>. Las busca solo.</li>
+          <li>Pedile lo que querés: <em>“una historia 9:16 con fondo limpio”</em>, o <em>“un cuadrado para el feed”</em>.</li>
         </ol>
-        <p class="tip">
-          Consejo para las fotos: producto de frente, fondo liso, buena luz y sin sombra dura encima.
-          Cuanto más limpia la foto, mejor sale la edición.
-        </p>
+        <p class="tip">Producto de frente, fondo liso, buena luz y sin sombra dura encima. Cuanto más limpia la foto, mejor sale la edición.</p>
       </details>
 
-      <details id="tokenBox">
+      <details id="tokenBox" hidden>
         <summary>Token de acceso</summary>
         <input id="token" type="password" placeholder="El valor de MCP_AUTH_TOKENS" autocomplete="off" />
       </details>
 
       <footer>
-        PNG, JPEG, WebP o GIF, hasta 25 MB. Las fotos grandes se achican solas antes de subir.
+        PNG, JPEG, WebP o GIF, hasta 25 MB. Las fotos grandes se achican solas.
         Los enlaces no vencen: podés guardarlos o mandarlos por mensaje.
       </footer>
     </main>
@@ -196,18 +196,19 @@
 
       const el = (id) => document.getElementById(id);
       const places = el("places");
-      const placesField = el("placesField");
-      const note = el("note");
+      const stepPlace = el("stepPlace");
+      const stepPhoto = el("stepPhoto");
       const shots = el("shots");
+      const drop = el("drop");
       const tokenInput = el("token");
       const tokenBox = el("tokenBox");
-      const drop = el("drop");
 
       let place = null;
+      let served = null;   // credential handed over by the server, if it has one
 
       readTokenFromHash();
       restoreToken();
-      loadPlaces();
+      configure();
 
       el("shoot").addEventListener("click", () => el("camera").click());
       el("pick").addEventListener("click", () => el("gallery").click());
@@ -225,25 +226,31 @@
         queue(event.dataTransfer.files);
       });
       document.addEventListener("paste", (event) => {
-        const pasted = [...(event.clipboardData ? event.clipboardData.files : [])];
-        if (pasted.length) { event.preventDefault(); queue(pasted); }
+        const files = [...(event.clipboardData ? event.clipboardData.files : [])];
+        if (files.length) { event.preventDefault(); queue(files); }
       });
-      tokenInput.addEventListener("input", save);
 
       /**
-       * The shop list lives on the server so this page and the recent_uploads
-       * tool always offer the same names. A deployment with none configured
-       * never sees the picker.
+       * Ask the server how this deployment is set up: which shops exist, and
+       * whether it issues the page its own upload credential. When it does,
+       * nobody is ever shown a token field.
        */
-      async function loadPlaces() {
-        let names = [];
+      async function configure() {
+        let config = {};
         try {
-          const response = await fetch("/api/sources");
-          names = (await response.json()).sources || [];
+          config = await (await fetch("/api/sources")).json();
         } catch {}
-        if (names.length === 0) return;
+        served = config.uploadToken || null;
+        if (!served) tokenBox.hidden = false;
 
-        placesField.hidden = false;
+        const names = config.sources || [];
+        if (names.length === 0) {
+          // No shops configured: the photo step is the only step.
+          el("photoN").textContent = "1";
+          return;
+        }
+
+        stepPlace.hidden = false;
         let remembered = null;
         try { remembered = localStorage.getItem("imagegen-place"); } catch {}
 
@@ -264,22 +271,23 @@
         for (const button of places.children) {
           button.setAttribute("aria-pressed", String(button.textContent === name));
         }
+        stepPlace.classList.toggle("done", Boolean(name));
+        el("placeSaid").textContent = name || "";
+        // Asking for a photo before knowing where it goes only invites a wrong answer.
+        stepPhoto.hidden = !name;
+        if (name) say("");
       }
 
       async function queue(list) {
         const files = [...list].filter((file) => file.size > 0);
         if (files.length === 0) return;
-        if (placesField.hidden === false && !place) {
-          say(true, "Elegí primero para cuál comercio es esta foto.");
-          return;
-        }
-        say(false, "");
+        say("");
         for (const file of files) await send(file);
       }
 
       async function send(file) {
         const row = addShot(file);
-        const token = save();
+        const token = served || saveTyped();
         try {
           const ready = await prepare(file);
           row.measure(ready);
@@ -291,14 +299,13 @@
 
           if (!response.ok) {
             row.fail(explain(response.status, payload, token));
-            if (response.status === 401) {
+            if (response.status === 401 && !served) {
+              tokenBox.hidden = false;
               tokenBox.open = true;
-              tokenInput.classList.add("needed");
               tokenInput.focus();
             }
             return;
           }
-          tokenInput.classList.remove("needed");
           row.done(payload);
         } catch (error) {
           row.fail(String(error && error.message ? error.message : error));
@@ -359,10 +366,10 @@
         const who = document.createElement("span");
         who.className = "who";
         who.textContent = place || file.name || "Foto";
-        const state = document.createElement("span");
-        state.className = "state";
-        state.textContent = "Subiendo";
-        top.append(who, state);
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = "Subiendo";
+        top.append(who, tag);
         const facts = document.createElement("div");
         facts.className = "facts";
         facts.textContent = size(file.size);
@@ -375,25 +382,23 @@
             if (after.bytes === before.bytes) {
               facts.textContent = size(before.bytes);
             } else if (after.width === before.width && after.height === before.height) {
-              // Only re-encoded: repeating the same dimensions either side reads as a bug.
               facts.textContent = `${before.width}×${before.height} · ${size(before.bytes)} → ${size(after.bytes)}`;
             } else {
               facts.textContent = `${before.width}×${before.height} · ${size(before.bytes)} → ${after.width}×${after.height} · ${size(after.bytes)}`;
             }
           },
           fail(why) {
-            state.className = "state bad";
-            state.textContent = "Error";
+            tag.className = "tag bad";
+            tag.textContent = "Error";
             const line = document.createElement("div");
             line.className = "why";
             line.textContent = why;
             col.append(line);
           },
           done(payload) {
-            state.className = "state ok";
-            state.textContent = "Lista";
+            tag.className = "tag ok";
+            tag.textContent = "Lista";
             if (!payload || !payload.url) return;
-            // The link is permanent, so it is worth offering rather than hiding.
             const row = document.createElement("div");
             row.className = "link";
             const link = document.createElement("a");
@@ -421,29 +426,32 @@
       function explain(status, payload, token) {
         const detail = (payload && (payload.error_description || (payload.error && payload.error.message))) || "";
         if (status === 401) {
-          return token
-            ? "Ese token no sirve. Pedí el correcto y pegalo abajo, en “Token de acceso”."
-            : "Falta el token de acceso: abrilo abajo y pegalo.";
+          return served
+            ? "Este enlace ya no tiene permiso para subir. Avisale a quien te lo pasó."
+            : token
+              ? "Ese token no sirve. Pedí el correcto y pegalo abajo."
+              : "Falta el token de acceso: abrilo abajo y pegalo.";
         }
         if (status === 413) return "La foto es muy pesada, incluso achicada.";
         if (status === 501) return detail || "El servidor no tiene dónde guardar las fotos todavía.";
-        return detail || ("No se pudo subir (error " + status + ")");
+        return detail || "No se pudo subir (error " + status + ")";
       }
 
-      function say(bad, text) {
-        note.className = "note" + (text ? " on" : "") + (bad ? " bad" : "");
-        note.textContent = text;
+      function say(text) {
+        const box = el("say");
+        box.textContent = text;
+        box.hidden = !text;
       }
 
-      function save() {
+      function saveTyped() {
         const token = tokenInput.value.trim();
         try { token ? localStorage.setItem("imagegen-token", token) : localStorage.removeItem("imagegen-token"); } catch {}
         return token;
       }
 
-      // A bookmark of the form .../u#t=<token> carries the token, so there is
-      // nothing to paste. The fragment never reaches the server, and it leaves
-      // the address bar once stored.
+      // A bookmark of the form .../u#t=<token> still works for deployments that
+      // issue no page credential. The fragment never reaches the server, and it
+      // leaves the address bar once stored.
       function readTokenFromHash() {
         const fromHash = new URLSearchParams(location.hash.slice(1)).get("t");
         if (!fromHash) return;

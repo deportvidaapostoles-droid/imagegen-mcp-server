@@ -3,6 +3,8 @@ import { createServer, type Server } from 'node:http';
 import { SignJWT, exportJWK, generateKeyPair, type JWK, type KeyLike } from 'jose';
 import {
   AuthError,
+  getUploadPageToken,
+  matchesUploadPageToken,
   authenticateRequest,
   authenticateStaticRequest,
   extractStaticSecret,
@@ -278,5 +280,50 @@ describe('shared-secret mode', () => {
     expect(() =>
       authenticateStaticRequest({ authorization: 'Bearer x' }, url('/mcp'), secretConfig({ tokens: [], configError: 'missing tokens' }))
     ).toThrow(/misconfigured/);
+  });
+});
+
+
+describe('the upload page credential', () => {
+  const env = { UPLOAD_PAGE_TOKEN: 'page-secret' } as NodeJS.ProcessEnv;
+
+  it('is off unless an operator sets one', () => {
+    expect(getUploadPageToken({} as NodeJS.ProcessEnv)).toBeUndefined();
+    expect(getUploadPageToken({ UPLOAD_PAGE_TOKEN: '   ' } as NodeJS.ProcessEnv)).toBeUndefined();
+    expect(getUploadPageToken(env)).toBe('page-secret');
+  });
+
+  it('never matches when none is configured, whatever is presented', () => {
+    expect(
+      matchesUploadPageToken(
+        { authorization: 'Bearer page-secret' },
+        undefined,
+        {} as NodeJS.ProcessEnv
+      )
+    ).toBe(false);
+  });
+
+  it('accepts the credential from the header or the query, and nothing else', () => {
+    expect(matchesUploadPageToken({ authorization: 'Bearer page-secret' }, undefined, env)).toBe(true);
+    expect(
+      matchesUploadPageToken({}, new URL('https://x.dev/api/upload?token=page-secret'), env)
+    ).toBe(true);
+    expect(matchesUploadPageToken({ authorization: 'Bearer wrong' }, undefined, env)).toBe(false);
+    expect(matchesUploadPageToken({}, undefined, env)).toBe(false);
+  });
+
+  it('is separate from the MCP tokens, so publishing it cannot hand out the server', () => {
+    const config = getAuthConfig({
+      MCP_AUTH_MODE: 'token',
+      MCP_AUTH_TOKENS: 'mcp-secret',
+      UPLOAD_PAGE_TOKEN: 'page-secret',
+    } as NodeJS.ProcessEnv);
+
+    // The page's credential is refused by the gate that guards /mcp...
+    expect(() =>
+      authenticateStaticRequest({ authorization: 'Bearer page-secret' }, undefined, config)
+    ).toThrow(AuthError);
+    // ...and the MCP token is not what the page is handed.
+    expect(getUploadPageToken({ MCP_AUTH_TOKENS: 'mcp-secret' } as NodeJS.ProcessEnv)).toBeUndefined();
   });
 });

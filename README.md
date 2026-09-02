@@ -463,9 +463,21 @@ The upload page then asks which one a photo is for and files it under
 `imagegen/<slug>/`, `recent_uploads` reports it and takes a `source` filter, and
 "the last photo from the pharmacy" resolves by prefix instead of by guesswork.
 `GET /api/sources` returns the same labels so the page and the tool never
-disagree; it is unauthenticated, since it only echoes names already printed on a
-public page. Deployments that leave it unset keep one shared bucket and never
-see the picker.
+disagree. Deployments that leave it unset keep one shared bucket and never see
+the picker.
+
+### Letting the page carry its own credential
+
+Asking shop staff to paste a token is the step they reliably get wrong. Set
+`UPLOAD_PAGE_TOKEN` and the page fetches it from `/api/sources` and uses it
+itself; the token field never appears.
+
+That token is **public** — it is served to every visitor of a public page. Which
+is exactly why it must not be one of `MCP_AUTH_TOKENS`: this credential is
+accepted by `/api/upload` and by nothing else, so publishing it lets a stranger
+who finds the deployment store images, and not use the MCP server. Weigh that
+before setting it; leaving it unset keeps the page asking for a real token,
+which the `#t=` bookmark can still supply.
 
 Whatever the store's access mode, the `url` you get back is this deployment's
 own **permanent link** — `https://<your-project>/i/imagegen/<place>/<id>.png`.

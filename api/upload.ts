@@ -15,7 +15,7 @@
  */
 
 import type { ServerResponse } from "node:http";
-import { getAuthConfig } from "../src/auth.js";
+import { getAuthConfig, matchesUploadPageToken } from "../src/auth.js";
 import { loadDotEnv } from "../src/config.js";
 import {
   applyCorsHeaders,
@@ -45,8 +45,13 @@ export default async function handler(req: NodeRequest, res: ServerResponse): Pr
     return;
   }
 
-  const authorized = await authorizeRequest(req, res, authConfig, console.error);
-  if (!authorized.ok) return;
+  // The page's own credential authorizes uploads and nothing else; anything
+  // else has to satisfy the same gate as /mcp.
+  const requestUrl = new URL(req.url ?? "/", "http://localhost");
+  if (!matchesUploadPageToken(req.headers, requestUrl)) {
+    const authorized = await authorizeRequest(req, res, authConfig, console.error);
+    if (!authorized.ok) return;
+  }
 
   if (!isUploadConfigured()) {
     writeJson(res, 501, {
@@ -59,7 +64,7 @@ export default async function handler(req: NodeRequest, res: ServerResponse): Pr
 
   try {
     const body = await readRawBody(req, MAX_UPLOAD_BYTES);
-    const source = new URL(req.url ?? "/", "http://localhost").searchParams.get("source") ?? undefined;
+    const source = requestUrl.searchParams.get("source") ?? undefined;
     const result = await storeImage(body, headerValue(req, "content-type"), process.env, source);
     // The signed URL lapses in hours; this deployment's own route does not.
     const stable = stableImageUrl(resolveBaseUrl(req, authConfig), result.pathname);
