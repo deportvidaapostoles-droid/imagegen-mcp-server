@@ -58,7 +58,8 @@ export default async function handler(req: NodeRequest, res: ServerResponse): Pr
 
   try {
     const body = await readRawBody(req, MAX_UPLOAD_BYTES);
-    const result = await storeImage(body, headerValue(req, "content-type"));
+    const source = new URL(req.url ?? "/", "http://localhost").searchParams.get("source") ?? undefined;
+    const result = await storeImage(body, headerValue(req, "content-type"), process.env, source);
     writeJson(res, 201, {
       ...result,
       message: "Pass this url to the images parameter of edit_image or submit_task.",

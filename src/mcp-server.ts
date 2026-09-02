@@ -18,12 +18,17 @@ import { ImageService, type ImageBlock } from "./image-service.js";
 import { TaskStore, type Task, type TaskKind } from "./task-store.js";
 import {
   GET_TASK_TOOL,
-  RECENT_UPLOADS_TOOL,
   SUBMIT_TASK_TOOL,
   UPLOAD_IMAGE_TOOL,
+  createRecentUploadsTool,
   createTools,
 } from "./tools.js";
-import { isUploadConfigured, listRecentImages, storeImage } from "./uploads.js";
+import {
+  getUploadSources,
+  isUploadConfigured,
+  listRecentImages,
+  storeImage,
+} from "./uploads.js";
 import { createErrorResponse, formatErrorMessage } from "./utils.js";
 import type { ImageQuality } from "./validators.js";
 
@@ -57,8 +62,12 @@ export interface CreateMcpServerOptions {
  * which the provider then reports as `Base64 decoding failed`. Saying so plainly
  * here is cheaper than every client rediscovering it.
  */
-export function buildInstructions(uploadPageUrl?: string): string {
+export function buildInstructions(uploadPageUrl?: string, sources: string[] = []): string {
   const uploadPage = uploadPageUrl ?? "the server's /u page";
+  const places =
+    sources.length > 0
+      ? ` Photos are filed by place (${sources.join(", ")}), and each entry says which one it came from — pass \`source\` to \`recent_uploads\` when the user names a shop rather than filtering by eye.`
+      : "";
   const lines = [
     "Generates and edits images through a hosted image model.",
     "",
@@ -66,7 +75,7 @@ export function buildInstructions(uploadPageUrl?: string): string {
     "",
     `1. An https:// URL is always the right answer. Pass it in \`images\` as is — no download, no re-encoding.`,
     `2. If the user has the image on their own machine, send them to ${uploadPage} to drop it there. This takes them seconds.`,
-    "3. They do not have to copy the URL back. Once they say the photo is uploaded, call `recent_uploads` and take the newest entry — check its uploaded_at and size look like the photo they described, and say which one you picked. The list is shared by everyone using this server, so when two entries are close in time, ask rather than guess.",
+    `3. They do not have to copy the URL back. Once they say the photo is uploaded, call \`recent_uploads\` and take the newest entries — check uploaded_at and size look like what they described, and say which ones you picked. The list is shared by everyone using this server, so when two entries are close in time, ask rather than guess.${places}`,
     "4. A Google Drive or Dropbox share link works too — the server rewrites it to the direct file. The file has to be shared with anyone who has the link; when it is not, the error says so and the fix is the sharing setting, not the link. Google Photos album links (photos.app.goo.gl) cannot be used at all.",
     "5. Reuse that URL for every later edit of the same photo. Do not upload it again.",
     "",
@@ -97,14 +106,17 @@ export function createMcpServer(
   const asyncTools = [SUBMIT_TASK_TOOL, GET_TASK_TOOL];
   const syncTools = createTools(config.provider, config.timeout);
   // The upload tool is only useful where the bytes have somewhere to go.
-  const uploadTools = isUploadConfigured() ? [UPLOAD_IMAGE_TOOL, RECENT_UPLOADS_TOOL] : [];
+  const sourceLabels = getUploadSources().map((source) => source.label);
+  const uploadTools = isUploadConfigured()
+    ? [UPLOAD_IMAGE_TOOL, createRecentUploadsTool(sourceLabels)]
+    : [];
   const tools: Tool[] = config.asyncOnly
     ? [...uploadTools, ...asyncTools]
     : [...uploadTools, ...asyncTools, ...syncTools];
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} }, instructions: buildInstructions(options.uploadPageUrl) }
+    { capabilities: { tools: {} }, instructions: buildInstructions(options.uploadPageUrl, sourceLabels) }
   );
 
   // The tools are always advertised, even without provider credentials: an
@@ -209,11 +221,14 @@ async function handleRecentUploads(args: Record<string, unknown>): Promise<CallT
 
   const requested = optionalNumber(args.limit) ?? 5;
   const limit = Math.min(20, Math.max(1, Math.trunc(requested)));
-  const images = await listRecentImages(limit);
+  const source = optionalString(args.source);
+  const images = await listRecentImages(limit, process.env, source);
   if (images.length === 0) {
     return jsonResult({
       images: [],
-      message: "Nothing has been uploaded to this server yet. Ask the user to drop the photo on the /u page first.",
+      message: source
+        ? `Nothing has been uploaded for ${source} yet. Ask the user to take or drop the photo on the /u page first.`
+        : "Nothing has been uploaded to this server yet. Ask the user to take or drop the photo on the /u page first.",
     });
   }
 

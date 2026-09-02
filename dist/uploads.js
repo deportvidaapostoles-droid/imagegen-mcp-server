@@ -12,6 +12,54 @@ import { randomUUID } from "node:crypto";
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** Every image this server stores lives under one prefix, so it can list its own. */
 const PREFIX = "imagegen/";
+function slug(label) {
+    return label
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}
+/**
+ * The places photos come from — two shops sharing one deployment, say.
+ *
+ * Configured as UPLOAD_SOURCES="Farmacia Paula, De Por Vida". Left unset, the
+ * server keeps its original single-bucket behaviour and never asks anyone to
+ * choose, so this stays invisible to deployments that do not need it.
+ */
+export function getUploadSources(env = process.env) {
+    const seen = new Set();
+    return (env.UPLOAD_SOURCES ?? "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .flatMap((label) => {
+        const id = slug(label);
+        if (!id || seen.has(id))
+            return [];
+        seen.add(id);
+        return [{ id, label }];
+    });
+}
+/**
+ * Match what the caller said against the configured sources, by id or by label.
+ * People type "De Por Vida"; the upload page sends "de-por-vida"; both resolve.
+ */
+export function resolveUploadSource(requested, env = process.env) {
+    const sources = getUploadSources(env);
+    if (sources.length === 0)
+        return undefined;
+    const wanted = (requested ?? "").trim();
+    if (!wanted) {
+        throw new Error(`Say which one this photo is for: ${sources.map((source) => source.label).join(", ")}`);
+    }
+    const key = slug(wanted);
+    const match = sources.find((source) => source.id === key);
+    if (!match) {
+        throw new Error(`Unknown source '${wanted}'. Configured: ${sources.map((source) => source.label).join(", ")}`);
+    }
+    return match;
+}
 const EXTENSIONS = {
     "image/png": "png",
     "image/jpeg": "jpg",
@@ -48,7 +96,7 @@ export function normalizeImageContentType(raw) {
     return contentType;
 }
 /** Store an image and return a URL the image providers can fetch. */
-export async function storeImage(body, contentType, env = process.env) {
+export async function storeImage(body, contentType, env = process.env, requestedSource) {
     if (!isUploadConfigured(env)) {
         throw new Error("Uploads are not configured: create a Vercel Blob store for this project so BLOB_READ_WRITE_TOKEN is set");
     }
@@ -59,20 +107,25 @@ export async function storeImage(body, contentType, env = process.env) {
         throw new Error(`The file is too large (${Math.round(body.length / 1024 / 1024)} MB, limit ${MAX_UPLOAD_BYTES / 1024 / 1024} MB)`);
     }
     const normalized = normalizeImageContentType(contentType);
-    const pathname = `${PREFIX}${randomUUID()}.${EXTENSIONS[normalized]}`;
+    const source = resolveUploadSource(requestedSource, env);
+    const folder = source ? `${source.id}/` : "";
+    const pathname = `${PREFIX}${folder}${randomUUID()}.${EXTENSIONS[normalized]}`;
     const preference = accessPreference(env);
-    if (preference !== "private") {
-        try {
-            return await putPublic(pathname, body, normalized, env);
+    const stored = await (async () => {
+        if (preference !== "private") {
+            try {
+                return await putPublic(pathname, body, normalized, env);
+            }
+            catch (error) {
+                // A store created with private access cannot take a public blob. Rather
+                // than making the operator recreate the store, sign a temporary URL.
+                if (preference === "public" || !isPrivateStoreError(error))
+                    throw error;
+            }
         }
-        catch (error) {
-            // A store created with private access cannot take a public blob. Rather
-            // than making the operator recreate the store, sign a temporary URL.
-            if (preference === "public" || !isPrivateStoreError(error))
-                throw error;
-        }
-    }
-    return putPrivate(pathname, body, normalized, env);
+        return putPrivate(pathname, body, normalized, env);
+    })();
+    return source ? { ...stored, source: source.label } : stored;
 }
 async function putPublic(pathname, body, contentType, env) {
     const { put } = await import("@vercel/blob");
@@ -122,21 +175,28 @@ async function signGetUrl(pathname, env) {
  * upload order — a page is fetched and sorted here, which is exact for the
  * first 1000 images and approximate beyond that.
  */
-export async function listRecentImages(limit = 5, env = process.env) {
+export async function listRecentImages(limit = 5, env = process.env, requestedSource) {
     if (!isUploadConfigured(env)) {
         throw new Error("Uploads are not configured: create a Vercel Blob store for this project so BLOB_READ_WRITE_TOKEN is set");
     }
+    // Filtering by source is just a narrower prefix — the store does the work.
+    const sources = getUploadSources(env);
+    const only = requestedSource ? resolveUploadSource(requestedSource, env) : undefined;
+    const prefix = only ? `${PREFIX}${only.id}/` : PREFIX;
+    const labelById = new Map(sources.map((source) => [source.id, source.label]));
     const { list } = await import("@vercel/blob");
-    const { blobs } = await list({ prefix: PREFIX, limit: 1000, token: env.BLOB_READ_WRITE_TOKEN });
+    const { blobs } = await list({ prefix, limit: 1000, token: env.BLOB_READ_WRITE_TOKEN });
     const newest = [...blobs]
         .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
         .slice(0, Math.max(1, limit));
     return Promise.all(newest.map(async (blob) => {
+        const folder = blob.pathname.slice(PREFIX.length).split("/")[0];
         const summary = {
             url: blob.url,
             pathname: blob.pathname,
             size: blob.size,
             uploadedAt: new Date(blob.uploadedAt).toISOString(),
+            ...(labelById.has(folder) ? { source: labelById.get(folder) } : {}),
         };
         if (!new URL(blob.url).hostname.includes(".private."))
             return summary;

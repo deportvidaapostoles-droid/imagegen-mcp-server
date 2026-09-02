@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isUploadConfigured, normalizeImageContentType, storeImage, MAX_UPLOAD_BYTES } from './uploads.js';
+import {
+  getUploadSources,
+  isUploadConfigured,
+  normalizeImageContentType,
+  resolveUploadSource,
+  storeImage,
+  MAX_UPLOAD_BYTES,
+} from './uploads.js';
 
 describe('uploads', () => {
   it('is disabled until a blob store is connected', () => {
@@ -142,5 +149,41 @@ describe('reading images back from our own store', () => {
     await expect(
       readStoredImage('https://x.private.blob.vercel-storage.com/imagegen/gone.png', env)
     ).rejects.toThrow(/no longer available/);
+  });
+});
+
+
+describe('upload sources', () => {
+  const env = (value?: string) => ({ UPLOAD_SOURCES: value } as NodeJS.ProcessEnv);
+
+  it('is off entirely when nothing is configured', () => {
+    expect(getUploadSources({} as NodeJS.ProcessEnv)).toEqual([]);
+    expect(resolveUploadSource(undefined, {} as NodeJS.ProcessEnv)).toBeUndefined();
+    expect(resolveUploadSource('anything', {} as NodeJS.ProcessEnv)).toBeUndefined();
+  });
+
+  it('turns configured labels into path-safe folders, accents and all', () => {
+    expect(getUploadSources(env('Farmacia Paula, De Por Vida'))).toEqual([
+      { id: 'farmacia-paula', label: 'Farmacia Paula' },
+      { id: 'de-por-vida', label: 'De Por Vida' },
+    ]);
+    expect(getUploadSources(env('Almacén Ñandú'))[0].id).toBe('almacen-nandu');
+  });
+
+  it('drops blanks and duplicates rather than creating two folders for one shop', () => {
+    expect(getUploadSources(env('Uno, ,uno,  Dos ')).map((source) => source.label)).toEqual(['Uno', 'Dos']);
+  });
+
+  it('resolves by label or by folder id, however the caller says it', () => {
+    const configured = env('Farmacia Paula, De Por Vida');
+    expect(resolveUploadSource('De Por Vida', configured)?.id).toBe('de-por-vida');
+    expect(resolveUploadSource('de-por-vida', configured)?.id).toBe('de-por-vida');
+    expect(resolveUploadSource('DE POR VIDA', configured)?.id).toBe('de-por-vida');
+  });
+
+  it('asks which shop rather than filing a photo under a guess', () => {
+    const configured = env('Farmacia Paula, De Por Vida');
+    expect(() => resolveUploadSource(undefined, configured)).toThrow(/Farmacia Paula, De Por Vida/);
+    expect(() => resolveUploadSource('Kiosco', configured)).toThrow(/Unknown source 'Kiosco'/);
   });
 });

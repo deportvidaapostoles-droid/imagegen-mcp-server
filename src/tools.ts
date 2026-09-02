@@ -212,24 +212,38 @@ export const UPLOAD_IMAGE_TOOL: Tool = {
   },
 };
 
-export const RECENT_UPLOADS_TOOL: Tool = {
-  name: "recent_uploads",
-  description:
-    "List the images most recently uploaded to this server, newest first, with the URL to pass to " +
-    "edit_image or submit_task. Call this when the user says they have just uploaded or dropped a photo " +
-    "and you do not have its URL — it saves them copying one across. The newest entry is almost always " +
-    "the one they mean, but confirm which it is by its uploaded_at time and size before editing, " +
-    "and note that the list is shared by everyone using this server.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      limit: {
-        type: "number",
-        description: "How many to return, newest first. 1-20, defaults to 5.",
-      },
+export function createRecentUploadsTool(sources: string[] = []): Tool {
+  const properties: Record<string, object> = {
+    limit: {
+      type: "number",
+      description: "How many to return, newest first. 1-20, defaults to 5.",
     },
-  },
-};
+  };
+  if (sources.length > 0) {
+    properties.source = {
+      type: "string",
+      description:
+        `Return only photos uploaded for this place. One of: ${sources.join(", ")}. ` +
+        "Omit to see every place at once.",
+      enum: sources,
+    };
+  }
+
+  return {
+    name: "recent_uploads",
+    description:
+      "List the images most recently uploaded to this server, newest first, with the URL to pass to " +
+      "edit_image or submit_task. Call this when the user says they have just uploaded or taken a photo " +
+      "and you do not have its URL — it saves them copying one across. " +
+      (sources.length > 0
+        ? `Each entry says which place it came from (${sources.join(", ")}); pass 'source' to narrow to one, ` +
+          "and prefer that over guessing when the user names a shop. "
+        : "") +
+      "The newest entries are usually the ones they mean, but check uploaded_at and size against what they " +
+      "described, say which ones you picked, and remember the list is shared by everyone using this server.",
+    inputSchema: { type: "object", properties },
+  };
+}
 
 /**
  * Submit an image generation or editing task.

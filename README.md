@@ -260,6 +260,7 @@ Resulting endpoints:
 | `POST /mcp` | `api/mcp.ts` | MCP endpoint (Streamable HTTP) |
 | `GET /health` | `api/health.ts` | Health check (`/api/health` also works) |
 | `POST /api/upload` | `api/upload.ts` | Upload an image, get a URL for `edit_image` (needs a Blob store) |
+| `GET /api/sources` | `api/sources.ts` | The places photos can be filed under (`UPLOAD_SOURCES`) |
 | `GET /.well-known/oauth-protected-resource` | `api/oauth-protected-resource.ts` | OAuth metadata (RFC 9728), when authentication is enabled |
 | `GET /.well-known/oauth-authorization-server` | `api/oauth-authorization-server.ts` | Mirror of the identity provider's discovery document |
 | `GET /` | static | Landing page (`web/index.html`) |
@@ -447,9 +448,23 @@ Photos album links (`photos.app.goo.gl`) have no direct form and cannot be used.
 
 The URL does not have to be carried back by hand either. **`recent_uploads`**
 lists what was stored most recently, newest first, so the client can say "I just
-dropped the photo" and the model looks it up. The list is per store, not per
+took the photo" and the model looks it up. The list is per store, not per
 person: everyone sharing a deployment sees the same entries, so the model is
 told to confirm which one is meant when two are close in time.
+
+When one deployment serves more than one place, set `UPLOAD_SOURCES`:
+
+```
+UPLOAD_SOURCES=Farmacia Paula, De Por Vida
+```
+
+The upload page then asks which one a photo is for and files it under
+`imagegen/<slug>/`, `recent_uploads` reports it and takes a `source` filter, and
+"the last photo from the pharmacy" resolves by prefix instead of by guesswork.
+`GET /api/sources` returns the same labels so the page and the tool never
+disagree; it is unauthenticated, since it only echoes names already printed on a
+public page. Deployments that leave it unset keep one shared bucket and never
+see the picker.
 
 The URL you get back depends on how the Blob store was created:
 
@@ -479,7 +494,8 @@ api/mcp.ts             Vercel serverless function -> /mcp
 api/health.ts          Vercel serverless function -> /health
 api/oauth-*.ts         Vercel serverless functions -> /.well-known/oauth-*
 api/upload.ts          Vercel serverless function -> /api/upload
-web/upload.html        Drag-and-drop upload page
+api/sources.ts         Vercel serverless function -> /api/sources
+web/upload.html        Upload page: camera, gallery, drag and drop
 web/index.html         Static landing page (Vercel output directory)
 ```
 
