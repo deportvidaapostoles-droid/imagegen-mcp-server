@@ -183,7 +183,8 @@
   <footer>
     Las fotos de más de 900 KB se reducen a 2048 px de lado mayor y se reencodean a JPEG antes de
     subir: es de sobra para una historia de 1080 × 1920 y mantiene la llamada por debajo del límite.
-    Las más chicas viajan tal cual, sin tocar.
+    Las más chicas viajan tal cual, sin tocar. Las URLs vienen firmadas y vencen a las 6 horas —
+    usalas en el día, y si te queda una vieja, volvé a subir la foto.
   </footer>
 </main>
 
@@ -300,7 +301,7 @@
       }
       urls.push(url);
       copyAll.classList.toggle("on", urls.length > 1);
-      row.done(url, urls.length === 1 && (await copy(url)));
+      row.done(url, urls.length === 1 && (await copy(url)), expiryOf(result.payload));
     } catch (error) {
       const code = error && error.code;
       if (code === "tool_error") {
@@ -315,6 +316,15 @@
         row.fail((error && error.message) || "No se pudo subir la foto.");
       }
     }
+  }
+
+  // A private blob store hands back a signed URL, and the server says when the
+  // signature lapses. Pasting a stale URL fails hours later for no visible
+  // reason, so show the deadline next to the link.
+  function expiryOf(payload) {
+    if (!payload || typeof payload !== "object" || !payload.expiresAt) return null;
+    const at = new Date(payload.expiresAt);
+    return Number.isNaN(at.getTime()) ? null : at;
   }
 
   function readUrl(payload) {
@@ -460,9 +470,13 @@
         msg.textContent = message;
         col.append(msg);
       },
-      done(url, copied) {
+      done(url, copied, expiresAt) {
         pill.className = "pill ok";
         pill.textContent = "Lista";
+        if (expiresAt) {
+          const hours = Math.round((expiresAt - Date.now()) / 3600000);
+          metrics.append(document.createTextNode(`  ·  vence ${clock(expiresAt)}${hours > 0 ? ` (${hours} h)` : ""}`));
+        }
         const wrap = document.createElement("div");
         wrap.className = "url";
         const code = document.createElement("code");
@@ -477,6 +491,10 @@
         col.append(wrap);
       },
     };
+  }
+
+  function clock(at) {
+    return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
   function size(bytes) {
