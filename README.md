@@ -523,6 +523,8 @@ api/upload.ts          Vercel serverless function -> /api/upload
 api/sources.ts         Vercel serverless function -> /api/sources
 api/image.ts           Vercel serverless function -> /i/<pathname>
 web/upload.html        Upload page: camera, gallery, drag and drop
+web/site.webmanifest   Home-screen identity for that page ("Fotos IA")
+web/icon*.png|svg      Its icon, at the sizes iOS and Android ask for
 web/index.html         Static landing page (Vercel output directory)
 ```
 

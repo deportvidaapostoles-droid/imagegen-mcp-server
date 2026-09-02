@@ -63,5 +63,16 @@
     "api/image.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/site.webmanifest",
+      "headers": [
+        {
+          "key": "content-type",
+          "value": "application/manifest+json; charset=utf-8"
+        }
+      ]
+    }
+  ]
 }
