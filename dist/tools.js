@@ -169,6 +169,23 @@ export const UPLOAD_IMAGE_TOOL = {
         required: ["image"],
     },
 };
+export const RECENT_UPLOADS_TOOL = {
+    name: "recent_uploads",
+    description: "List the images most recently uploaded to this server, newest first, with the URL to pass to " +
+        "edit_image or submit_task. Call this when the user says they have just uploaded or dropped a photo " +
+        "and you do not have its URL — it saves them copying one across. The newest entry is almost always " +
+        "the one they mean, but confirm which it is by its uploaded_at time and size before editing, " +
+        "and note that the list is shared by everyone using this server.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            limit: {
+                type: "number",
+                description: "How many to return, newest first. 1-20, defaults to 5.",
+            },
+        },
+    },
+};
 /**
  * Submit an image generation or editing task.
  * Returns immediately with a task_id. Use get_task to poll for results.

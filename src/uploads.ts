@@ -13,6 +13,9 @@ import { randomUUID } from "node:crypto";
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
+/** Every image this server stores lives under one prefix, so it can list its own. */
+const PREFIX = "imagegen/";
+
 const EXTENSIONS: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -88,7 +91,7 @@ export async function storeImage(
   }
 
   const normalized = normalizeImageContentType(contentType);
-  const pathname = `imagegen/${randomUUID()}.${EXTENSIONS[normalized]}`;
+  const pathname = `${PREFIX}${randomUUID()}.${EXTENSIONS[normalized]}`;
   const preference = accessPreference(env);
 
   if (preference !== "private") {
@@ -126,7 +129,7 @@ async function putPrivate(
   contentType: string,
   env: NodeJS.ProcessEnv
 ): Promise<UploadResult> {
-  const { put, issueSignedToken, presignUrl } = await import("@vercel/blob");
+  const { put } = await import("@vercel/blob");
   const token = env.BLOB_READ_WRITE_TOKEN;
 
   const blob = await put(pathname, body, {
@@ -136,28 +139,77 @@ async function putPrivate(
     addRandomSuffix: false,
   });
 
-  // The image provider fetches the URL itself and carries no credentials, so a
-  // private blob has to be handed out as a signed, expiring link.
+  const link = await signGetUrl(blob.pathname, env);
+  return { url: link.url, size: body.length, contentType, expiresAt: link.expiresAt };
+}
+
+/**
+ * A private blob has to be handed out as a signed, expiring link: the image
+ * provider fetches the URL itself and carries no credentials.
+ */
+async function signGetUrl(
+  pathname: string,
+  env: NodeJS.ProcessEnv
+): Promise<{ url: string; expiresAt: string }> {
+  const { issueSignedToken, presignUrl } = await import("@vercel/blob");
+  const token = env.BLOB_READ_WRITE_TOKEN;
   const validUntil = Date.now() + signedUrlTtlSeconds(env) * 1000;
-  const signed = await issueSignedToken({
-    token,
-    pathname: blob.pathname,
-    operations: ["get"],
-    validUntil,
-  });
+  const signed = await issueSignedToken({ token, pathname, operations: ["get"], validUntil });
   const { presignedUrl } = await presignUrl(signed, {
     operation: "get",
-    pathname: blob.pathname,
+    pathname,
     access: "private",
     validUntil,
   });
+  return { url: presignedUrl, expiresAt: new Date(validUntil).toISOString() };
+}
 
-  return {
-    url: presignedUrl,
-    size: body.length,
-    contentType,
-    expiresAt: new Date(validUntil).toISOString(),
-  };
+export interface StoredImageSummary {
+  url: string;
+  pathname: string;
+  size: number;
+  uploadedAt: string;
+  expiresAt?: string;
+}
+
+/**
+ * The images most recently added to this store, newest first.
+ *
+ * This is what lets an upload made in a browser reach the model without the
+ * user copying a URL across: they drop the photo, then say so, and the tool
+ * finds it. Pathnames are random UUIDs, so the store cannot return them in
+ * upload order — a page is fetched and sorted here, which is exact for the
+ * first 1000 images and approximate beyond that.
+ */
+export async function listRecentImages(
+  limit = 5,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<StoredImageSummary[]> {
+  if (!isUploadConfigured(env)) {
+    throw new Error(
+      "Uploads are not configured: create a Vercel Blob store for this project so BLOB_READ_WRITE_TOKEN is set"
+    );
+  }
+
+  const { list } = await import("@vercel/blob");
+  const { blobs } = await list({ prefix: PREFIX, limit: 1000, token: env.BLOB_READ_WRITE_TOKEN });
+  const newest = [...blobs]
+    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+    .slice(0, Math.max(1, limit));
+
+  return Promise.all(
+    newest.map(async (blob) => {
+      const summary: StoredImageSummary = {
+        url: blob.url,
+        pathname: blob.pathname,
+        size: blob.size,
+        uploadedAt: new Date(blob.uploadedAt).toISOString(),
+      };
+      if (!new URL(blob.url).hostname.includes(".private.")) return summary;
+      const link = await signGetUrl(blob.pathname, env);
+      return { ...summary, url: link.url, expiresAt: link.expiresAt };
+    })
+  );
 }
 
 /**

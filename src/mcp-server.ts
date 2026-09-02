@@ -16,8 +16,14 @@ import {
 import type { ServerRuntimeConfig } from "./config.js";
 import { ImageService, type ImageBlock } from "./image-service.js";
 import { TaskStore, type Task, type TaskKind } from "./task-store.js";
-import { GET_TASK_TOOL, SUBMIT_TASK_TOOL, UPLOAD_IMAGE_TOOL, createTools } from "./tools.js";
-import { isUploadConfigured, storeImage } from "./uploads.js";
+import {
+  GET_TASK_TOOL,
+  RECENT_UPLOADS_TOOL,
+  SUBMIT_TASK_TOOL,
+  UPLOAD_IMAGE_TOOL,
+  createTools,
+} from "./tools.js";
+import { isUploadConfigured, listRecentImages, storeImage } from "./uploads.js";
 import { createErrorResponse, formatErrorMessage } from "./utils.js";
 import type { ImageQuality } from "./validators.js";
 
@@ -59,8 +65,9 @@ export function buildInstructions(uploadPageUrl?: string): string {
     "How to give this server an image to edit:",
     "",
     `1. An https:// URL is always the right answer. Pass it in \`images\` as is — no download, no re-encoding.`,
-    `2. If the user has the image on their own machine, send them to ${uploadPage} to drop it there, and ask them to paste back the URL it returns. This takes them seconds.`,
-    "3. Reuse that URL for every later edit of the same photo. Do not upload it again.",
+    `2. If the user has the image on their own machine, send them to ${uploadPage} to drop it there. This takes them seconds.`,
+    "3. They do not have to copy the URL back. Once they say the photo is uploaded, call `recent_uploads` and take the newest entry — check its uploaded_at and size look like the photo they described, and say which one you picked. The list is shared by everyone using this server, so when two entries are close in time, ask rather than guess.",
+    "4. Reuse that URL for every later edit of the same photo. Do not upload it again.",
     "",
     "Never do these, they do not work:",
     "",
@@ -89,7 +96,7 @@ export function createMcpServer(
   const asyncTools = [SUBMIT_TASK_TOOL, GET_TASK_TOOL];
   const syncTools = createTools(config.provider, config.timeout);
   // The upload tool is only useful where the bytes have somewhere to go.
-  const uploadTools = isUploadConfigured() ? [UPLOAD_IMAGE_TOOL] : [];
+  const uploadTools = isUploadConfigured() ? [UPLOAD_IMAGE_TOOL, RECENT_UPLOADS_TOOL] : [];
   const tools: Tool[] = config.asyncOnly
     ? [...uploadTools, ...asyncTools]
     : [...uploadTools, ...asyncTools, ...syncTools];
@@ -112,6 +119,8 @@ export function createMcpServer(
       switch (name) {
         case "upload_image":
           return await handleUploadImage(args);
+        case "recent_uploads":
+          return await handleRecentUploads(args);
         case "submit_task":
           return handleSubmitTask(taskStore, args);
         case "get_task":
@@ -187,6 +196,29 @@ async function handleUploadImage(args: Record<string, unknown>): Promise<CallToo
   return jsonResult({
     ...result,
     message: "Pass this url in the images parameter of edit_image or submit_task.",
+  });
+}
+
+async function handleRecentUploads(args: Record<string, unknown>): Promise<CallToolResult> {
+  if (!isUploadConfigured()) {
+    return createErrorResponse(
+      "Uploads are not configured on this server: connect a Vercel Blob store to the project so BLOB_READ_WRITE_TOKEN is set."
+    );
+  }
+
+  const requested = optionalNumber(args.limit) ?? 5;
+  const limit = Math.min(20, Math.max(1, Math.trunc(requested)));
+  const images = await listRecentImages(limit);
+  if (images.length === 0) {
+    return jsonResult({
+      images: [],
+      message: "Nothing has been uploaded to this server yet. Ask the user to drop the photo on the /u page first.",
+    });
+  }
+
+  return jsonResult({
+    images,
+    message: "Newest first. Pass the url of the one the user meant in the images parameter of edit_image.",
   });
 }
 

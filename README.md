@@ -439,6 +439,12 @@ and the token fills itself in — the fragment is stored in the browser and neve
 sent to the server. Uploads accept PNG, JPEG, WebP and GIF up to 25 MB and
 require the same authentication as `/mcp`.
 
+The URL does not have to be carried back by hand either. **`recent_uploads`**
+lists what was stored most recently, newest first, so the client can say "I just
+dropped the photo" and the model looks it up. The list is per store, not per
+person: everyone sharing a deployment sees the same entries, so the model is
+told to confirm which one is meant when two are close in time.
+
 The URL you get back depends on how the Blob store was created:
 
 - **Public store** — a permanent, unguessable URL. Anyone holding the link can

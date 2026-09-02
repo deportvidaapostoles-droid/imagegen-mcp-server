@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { getServerRuntimeConfig } from './config.js';
 import { buildInstructions, createMcpServer } from './mcp-server.js';
@@ -12,6 +12,12 @@ function configWith(env: Record<string, string>) {
 }
 
 describe('buildInstructions', () => {
+  it('tells the model to look the URL up rather than have the user copy it', () => {
+    const instructions = buildInstructions('https://example.vercel.app/u');
+    expect(instructions).toContain('recent_uploads');
+    expect(instructions).toMatch(/shared by everyone|ask rather than guess/i);
+  });
+
   it('names the deployment upload page so the model can link to it', () => {
     const instructions = buildInstructions('https://example.vercel.app/u');
     expect(instructions).toContain('https://example.vercel.app/u');
@@ -57,6 +63,22 @@ describe('buildInstructions', () => {
 });
 
 describe('createMcpServer', () => {
+  it('advertises the upload tools only where the bytes have somewhere to go', () => {
+    // The store token is read from the process environment, not the run config.
+    const withoutStore = createMcpServer(configWith({ OPENAI_API_KEY: 'sk-test-key' }));
+    expect(withoutStore.tools.map((tool) => tool.name)).not.toContain('recent_uploads');
+    expect(withoutStore.tools.map((tool) => tool.name)).not.toContain('upload_image');
+
+    vi.stubEnv('BLOB_READ_WRITE_TOKEN', 'vercel_blob_rw_test');
+    try {
+      const withStore = createMcpServer(configWith({ OPENAI_API_KEY: 'sk-test-key' }));
+      expect(withStore.tools.map((tool) => tool.name)).toContain('recent_uploads');
+      expect(withStore.tools.map((tool) => tool.name)).toContain('upload_image');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('exposes the sync and async tools when the provider is configured', () => {
     const { tools } = createMcpServer(configWith({ OPENAI_API_KEY: 'sk-test-key' }));
     expect(tools.map((tool) => tool.name).sort()).toEqual([
