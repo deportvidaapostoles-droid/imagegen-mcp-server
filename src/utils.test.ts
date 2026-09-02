@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   formatErrorMessage,
   createErrorResponse,
+  normalizeSharedImageUrl,
   parseImageInput,
+  urlToBase64,
 } from './utils.js';
 
 describe('formatErrorMessage', () => {
@@ -132,5 +134,66 @@ describe('file paths on a remote deployment', () => {
   it('adds the same guidance to a missing local file', async () => {
     delete process.env.VERCEL;
     await expect(parseImageInput('/definitely/not/here.png')).rejects.toThrow(/No such file/);
+  });
+});
+
+
+describe('normalizeSharedImageUrl', () => {
+  it('turns a Drive viewer link into a download link', () => {
+    expect(normalizeSharedImageUrl('https://drive.google.com/file/d/1AbC-dEf/view?usp=sharing')).toBe(
+      'https://drive.google.com/uc?export=download&id=1AbC-dEf'
+    );
+  });
+
+  it('handles the older open?id= form', () => {
+    expect(normalizeSharedImageUrl('https://drive.google.com/open?id=XyZ123')).toBe(
+      'https://drive.google.com/uc?export=download&id=XyZ123'
+    );
+  });
+
+  it('asks Dropbox for the file rather than the preview page', () => {
+    const rewritten = new URL(
+      normalizeSharedImageUrl('https://www.dropbox.com/scl/fi/abc/photo.jpg?rlkey=k&dl=0')
+    );
+    expect(rewritten.searchParams.get('raw')).toBe('1');
+    expect(rewritten.searchParams.get('dl')).toBeNull();
+    expect(rewritten.searchParams.get('rlkey')).toBe('k');
+  });
+
+  it('leaves a direct image URL and anything unparseable alone', () => {
+    const direct = 'https://example.com/photo.png';
+    expect(normalizeSharedImageUrl(direct)).toBe(direct);
+    expect(normalizeSharedImageUrl('not a url')).toBe('not a url');
+  });
+});
+
+describe('urlToBase64 failures', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('explains that an unshared Drive file is a sharing setting, not a bad link', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<html>Sign in</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })) as typeof fetch;
+
+    await expect(
+      urlToBase64('https://drive.google.com/file/d/1AbC-dEf/view')
+    ).rejects.toThrow(/Anyone with the link/);
+  });
+
+  it('says Google Photos album links cannot be used at all', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<html></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      })) as typeof fetch;
+
+    await expect(urlToBase64('https://photos.app.goo.gl/abc123')).rejects.toThrow(
+      /Google Photos album links/
+    );
   });
 });

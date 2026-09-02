@@ -14,6 +14,7 @@ export function createTools(provider: Provider, defaultTimeout: number): Tool[] 
   const providerLabel = provider === "openai" ? "OpenAI" : "Gemini";
   const imageDesc =
     "An image to edit. Preferred: a public https:// URL of the image — this is the only reliable way to send a large image to a remote server. " +
+    "A Google Drive or Dropbox share link is accepted and rewritten to the direct file, provided it is shared with anyone who has the link. " +
     "Also accepted: a base64-encoded string (optionally as a data URL like data:image/png;base64,...), or an absolute file path " +
     "(/path/to/image.png), which only works when the server runs on the same machine as the caller. " +
     "Do not read a local image file and inline it here: writing out a multi-megabyte base64 string takes minutes and is " +

@@ -8,7 +8,70 @@
 /** Largest image accepted from a URL, to keep a bad link from exhausting memory. */
 export const MAX_REMOTE_IMAGE_BYTES = 25 * 1024 * 1024;
 
-export async function urlToBase64(url: string): Promise<{ data: string; mimeType: string }> {
+/**
+ * Rewrite a share link into something that actually serves bytes.
+ *
+ * People hand over the link their phone or laptop gave them, which for Drive
+ * and Dropbox is a viewer page, not the file. Both providers have a direct
+ * form, so translate rather than refuse — the file still has to be shared with
+ * anyone who has the link, which `describeFetchFailure` explains when it is not.
+ */
+export function normalizeSharedImageUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+
+  if (parsed.hostname === 'drive.google.com') {
+    // .../file/d/<id>/view  and  /open?id=<id>  both name a file we can download.
+    const fileId = /\/file\/d\/([^/]+)/.exec(parsed.pathname)?.[1] ?? parsed.searchParams.get('id');
+    if (fileId) return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+  }
+
+  if (parsed.hostname.endsWith('dropbox.com') && parsed.searchParams.get('raw') !== '1') {
+    parsed.searchParams.delete('dl');
+    parsed.searchParams.set('raw', '1');
+    return parsed.toString();
+  }
+
+  return url;
+}
+
+/** Turn "not an image" into the reason, which is usually a sharing setting. */
+function describeFetchFailure(url: string, contentType: string): string {
+  const host = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  })();
+
+  if (host.endsWith('google.com') && contentType.startsWith('text/html')) {
+    return (
+      'Google returned a web page instead of the image. The file is probably not shared: open it in ' +
+      "Drive, choose Share -> General access -> Anyone with the link, and pass the link again."
+    );
+  }
+  if (host.endsWith('dropbox.com') && contentType.startsWith('text/html')) {
+    return (
+      'Dropbox returned a web page instead of the image. Make sure the link is a shared file link ' +
+      'and that the file is still shared.'
+    );
+  }
+  if (host.endsWith('goo.gl') || host.endsWith('photos.google.com')) {
+    return (
+      'Google Photos album links do not serve the image itself, and there is no direct form to rewrite ' +
+      'them to. Download the photo and upload it, or put it in a shared Drive folder instead.'
+    );
+  }
+  return `The URL does not point to an image (content-type: ${contentType})`;
+}
+
+export async function urlToBase64(rawUrl: string): Promise<{ data: string; mimeType: string }> {
+  const url = normalizeSharedImageUrl(rawUrl);
   try {
     const response = await fetch(url, { headers: { accept: 'image/*' } });
     if (!response.ok) {
@@ -24,7 +87,7 @@ export async function urlToBase64(url: string): Promise<{ data: string; mimeType
 
     const contentType = (response.headers.get('content-type') || 'image/png').split(';')[0].trim();
     if (!contentType.startsWith('image/')) {
-      throw new Error(`The URL does not point to an image (content-type: ${contentType})`);
+      throw new Error(describeFetchFailure(url, contentType));
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());
