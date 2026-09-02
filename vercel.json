@@ -9,6 +9,10 @@
       "destination": "/upload.html"
     },
     {
+      "source": "/i/:path*",
+      "destination": "/api/image?path=:path*"
+    },
+    {
       "source": "/mcp",
       "destination": "/api/mcp"
     },
@@ -55,6 +59,9 @@
     },
     "api/sources.ts": {
       "maxDuration": 10
+    },
+    "api/image.ts": {
+      "maxDuration": 30
     }
   }
 }

@@ -129,8 +129,20 @@ export function isRemoteDeployment(env: NodeJS.ProcessEnv = process.env): boolea
  */
 export const REMOTE_FILE_PATH_HELP =
   'This server runs remotely and cannot read files on your machine. ' +
-  'Upload the image (POST it to /api/upload, or use the /upload.html page) and pass the returned https:// URL ' +
-  'in the images parameter instead. A base64-encoded string also works for small images.';
+  "Send the user to this server's /u page to take or pick the photo, then call recent_uploads to get its URL — " +
+  'they do not have to copy anything across. Pass that https:// URL in the images parameter. ' +
+  'A base64-encoded string also works for small images.';
+
+/** The store pathname behind one of this server's own /i/ links, if that is what this is. */
+function ownImagePath(input: string, route: string): string | null {
+  try {
+    const { pathname } = new URL(input);
+    if (!pathname.startsWith(route)) return null;
+    return decodeURIComponent(pathname.slice(route.length));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Parse an image input that can be:
@@ -156,7 +168,17 @@ export async function parseImageInput(input: string): Promise<{ data: string; mi
   if (input.startsWith('http://') || input.startsWith('https://')) {
     // An image this deployment stored itself is read with the store token: a
     // signed link can expire or lose a query parameter on the way here.
-    const { readStoredImage } = await import('./uploads.js');
+    const { IMAGE_ROUTE, openStoredImage, readStoredImage } = await import('./uploads.js');
+
+    // Our own permanent link names a pathname in our own store. Reading it
+    // directly beats fetching our own URL over the network.
+    const ownPath = ownImagePath(input, IMAGE_ROUTE);
+    if (ownPath) {
+      const served = await openStoredImage(ownPath);
+      if (served) return { data: served.body.toString('base64'), mimeType: served.contentType };
+      throw new Error(`That image is no longer stored on this server: ${ownPath}`);
+    }
+
     const stored = await readStoredImage(input);
     if (stored) return stored;
     return urlToBase64(input);

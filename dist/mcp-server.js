@@ -10,7 +10,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextpro
 import { ImageService } from "./image-service.js";
 import { TaskStore } from "./task-store.js";
 import { GET_TASK_TOOL, SUBMIT_TASK_TOOL, UPLOAD_IMAGE_TOOL, createRecentUploadsTool, createTools, } from "./tools.js";
-import { getUploadSources, isUploadConfigured, listRecentImages, storeImage, } from "./uploads.js";
+import { getUploadSources, isUploadConfigured, listRecentImages, stableImageUrl, storeImage, } from "./uploads.js";
 import { createErrorResponse, formatErrorMessage } from "./utils.js";
 export const SERVER_NAME = "imagegen-mcp-server";
 export const SERVER_VERSION = "0.3.0";
@@ -47,11 +47,18 @@ export function buildInstructions(uploadPageUrl, sources = []) {
         "`upload_image` exists for the case where you already hold small image bytes (roughly under 1 MB) and no browser is involved. For anything larger, the upload page is faster and more reliable — prefer it and say so to the user rather than attempting the base64.",
         "",
         "`generate_image` and `edit_image` block until the image is ready. Use `submit_task` plus `get_task` instead when a call would otherwise outlive the client's timeout.",
+        "",
+        "When someone does not know how any of this works, or asks for an edit without having uploaded anything, do not just report the gap: give them " +
+            `${uploadPage} and the three steps — open it on the phone, take or pick the photo, come back and say it is up. Then call \`recent_uploads\` yourself. ` +
+            "Say the aspect ratio you are using and why: 9:16 for a story, 1:1 for a feed post, 4:5 for a taller feed post.",
+        "",
+        "Image URLs from this server do not expire, so they are safe to hand back to the user to save or share.",
     ];
     return lines.join("\n");
 }
 export function createMcpServer(config, options = {}) {
     const log = options.log ?? (() => { });
+    const baseUrl = options.baseUrl;
     const service = new ImageService(config, log);
     const taskStore = new TaskStore(service, {
         maxRetries: config.maxRetries,
@@ -79,9 +86,9 @@ export function createMcpServer(config, options = {}) {
         try {
             switch (name) {
                 case "upload_image":
-                    return await handleUploadImage(args);
+                    return await handleUploadImage(args, baseUrl);
                 case "recent_uploads":
-                    return await handleRecentUploads(args);
+                    return await handleRecentUploads(args, baseUrl, options.uploadPageUrl);
                 case "submit_task":
                     return handleSubmitTask(taskStore, args);
                 case "get_task":
@@ -121,7 +128,7 @@ export function createMcpServer(config, options = {}) {
     return { server, service, taskStore, tools };
 }
 // ─── Tool handlers ──────────────────────────────────────────────────────────
-async function handleUploadImage(args) {
+async function handleUploadImage(args, baseUrl) {
     if (!isUploadConfigured()) {
         return createErrorResponse("Uploads are not configured on this server: connect a Vercel Blob store to the project so BLOB_READ_WRITE_TOKEN is set.");
     }
@@ -149,11 +156,11 @@ async function handleUploadImage(args) {
     }
     const result = await storeImage(buffer, mimeType);
     return jsonResult({
-        ...result,
+        ...withStableUrl(result, baseUrl),
         message: "Pass this url in the images parameter of edit_image or submit_task.",
     });
 }
-async function handleRecentUploads(args) {
+async function handleRecentUploads(args, baseUrl, uploadPageUrl) {
     if (!isUploadConfigured()) {
         return createErrorResponse("Uploads are not configured on this server: connect a Vercel Blob store to the project so BLOB_READ_WRITE_TOKEN is set.");
     }
@@ -164,14 +171,14 @@ async function handleRecentUploads(args) {
     if (images.length === 0) {
         return jsonResult({
             images: [],
-            message: source
-                ? `Nothing has been uploaded for ${source} yet. Ask the user to take or drop the photo on the /u page first.`
-                : "Nothing has been uploaded to this server yet. Ask the user to take or drop the photo on the /u page first.",
+            nothing_uploaded_yet: true,
+            ...howToUpload(uploadPageUrl, source),
         });
     }
     return jsonResult({
-        images,
-        message: "Newest first. Pass the url of the one the user meant in the images parameter of edit_image.",
+        images: images.map((image) => withStableUrl(image, baseUrl)),
+        message: "Newest first. Pass the url of the one the user meant in the images parameter of edit_image. " +
+            "These urls do not expire, so they are safe to save or share.",
     });
 }
 function handleSubmitTask(taskStore, args) {
@@ -271,6 +278,42 @@ function completedTaskResult(task) {
         content.push({ type: "image", data, mimeType: task.mimeType });
     }
     return { content };
+}
+/**
+ * Prefer this deployment's own permanent link over the store's signed one.
+ *
+ * A signed URL lapses in hours, which is invisible until someone reopens it a
+ * day later. Handing back the stable route means a URL kept in a chat, a
+ * calendar entry or a scheduling tool still resolves.
+ */
+function withStableUrl(stored, baseUrl) {
+    const stable = stableImageUrl(baseUrl, stored.pathname);
+    if (!stable)
+        return stored;
+    const { expiresAt, ...rest } = stored;
+    return { ...rest, url: stable, signed_url: stored.url };
+}
+/**
+ * What to tell someone who has not uploaded the photo yet.
+ *
+ * The model reaches this exactly when a person is waiting and confused, so it
+ * carries the real link and the whole short procedure rather than a hint.
+ */
+function howToUpload(uploadPageUrl, source) {
+    const page = uploadPageUrl ?? "this server's /u page";
+    return {
+        message: source
+            ? `No photos have been uploaded for ${source} yet. Give the user the link below and walk them through it.`
+            : "No photos have been uploaded yet. Give the user the link below and walk them through it.",
+        upload_page: page,
+        steps: [
+            `Open ${page} on the phone — save it to the home screen and it is one tap next time.`,
+            ...(source ? [`Tap ${source} at the top so the photo is filed under the right place.`] : []),
+            "Tap 'Sacar foto' to use the camera, or 'Elegir de la galería' for one already taken. Several at once is fine.",
+            "Come back and say the photo is up. Then call recent_uploads again — nothing has to be copied across.",
+        ],
+        then: "With the url in hand, call edit_image (or generate_image for a picture from scratch), naming aspect_ratio 9:16 for a story, 1:1 for a feed post.",
+    };
 }
 function jsonResult(payload) {
     return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };

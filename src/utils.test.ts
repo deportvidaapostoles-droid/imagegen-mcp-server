@@ -110,7 +110,7 @@ describe('file paths on a remote deployment', () => {
   it('says what to do instead of failing with a bare ENOENT', async () => {
     process.env.VERCEL = '1';
     await expect(parseImageInput('/mnt/user-data/uploads/photo.png')).rejects.toThrow(
-      /cannot read files on your machine.*\/api\/upload/s
+      /cannot read files on your machine.*\/u page.*recent_uploads/s
     );
   });
 

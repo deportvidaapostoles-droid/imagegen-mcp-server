@@ -91,6 +91,8 @@
 
       details { border-top: 1px solid var(--line); padding-top: .9rem; }
       summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
+      #guide ol { margin: .7rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .45rem; font-size: .92rem; }
+      #guide .tip { margin: .8rem 0 0; font-size: .88rem; color: var(--muted); }
       input[type="password"] {
         width: 100%; margin-top: .6rem; padding: .75rem; font: inherit;
         border: 1.5px solid var(--line-strong); border-radius: 10px;
@@ -116,6 +118,12 @@
       .state.bad { color: var(--bad); }
       .facts { font: 400 .78rem/1.45 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
       .why { font-size: .86rem; color: var(--bad); }
+      .link { display: flex; align-items: center; gap: .75rem; font-size: .86rem; }
+      .link a { color: var(--accent); }
+      .link button {
+        font: 500 .8rem/1 var(--sans); padding: .35rem .6rem; border-radius: 8px;
+        border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer;
+      }
 
       footer { color: var(--muted); font-size: .84rem; border-top: 1px solid var(--line); padding-top: 1rem; }
       @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -158,6 +166,19 @@
       <div id="note" class="note"></div>
       <div id="shots"></div>
 
+      <details id="guide">
+        <summary>¿Cómo se usa?</summary>
+        <ol>
+          <li>Elegí el comercio y sacá la foto. Podés subir varias de una.</li>
+          <li>Volvé a Claude y decile <em>“ya subí las fotos”</em>. Las busca solo, no hace falta copiar nada.</li>
+          <li>Pedile lo que querés: <em>“hacé una historia 9:16 con fondo limpio”</em>, o <em>“un cuadrado para el feed”</em>.</li>
+        </ol>
+        <p class="tip">
+          Consejo para las fotos: producto de frente, fondo liso, buena luz y sin sombra dura encima.
+          Cuanto más limpia la foto, mejor sale la edición.
+        </p>
+      </details>
+
       <details id="tokenBox">
         <summary>Token de acceso</summary>
         <input id="token" type="password" placeholder="El valor de MCP_AUTH_TOKENS" autocomplete="off" />
@@ -165,7 +186,7 @@
 
       <footer>
         PNG, JPEG, WebP o GIF, hasta 25 MB. Las fotos grandes se achican solas antes de subir.
-        Los enlaces valen 6 horas: usá las fotos el mismo día.
+        Los enlaces no vencen: podés guardarlos o mandarlos por mensaje.
       </footer>
     </main>
 
@@ -371,16 +392,28 @@
           done(payload) {
             state.className = "state ok";
             state.textContent = "Lista";
-            if (payload && payload.expiresAt) {
-              const at = new Date(payload.expiresAt);
-              if (!Number.isNaN(at.getTime())) {
-                facts.append(
-                  document.createTextNode(
-                    `  ·  vence ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                  )
-                );
+            if (!payload || !payload.url) return;
+            // The link is permanent, so it is worth offering rather than hiding.
+            const row = document.createElement("div");
+            row.className = "link";
+            const link = document.createElement("a");
+            link.href = payload.url;
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "Ver foto";
+            const copyButton = document.createElement("button");
+            copyButton.type = "button";
+            copyButton.textContent = "Copiar enlace";
+            copyButton.addEventListener("click", async () => {
+              try {
+                await navigator.clipboard.writeText(payload.url);
+                copyButton.textContent = "Copiado";
+              } catch {
+                copyButton.textContent = "No se pudo copiar";
               }
-            }
+            });
+            row.append(link, copyButton);
+            col.append(row);
           },
         };
       }

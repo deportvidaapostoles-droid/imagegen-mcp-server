@@ -135,7 +135,7 @@ async function putPublic(pathname, body, contentType, env) {
         token: env.BLOB_READ_WRITE_TOKEN,
         addRandomSuffix: false,
     });
-    return { url: blob.url, size: body.length, contentType };
+    return { url: blob.url, pathname: blob.pathname, size: body.length, contentType };
 }
 async function putPrivate(pathname, body, contentType, env) {
     const { put } = await import("@vercel/blob");
@@ -147,7 +147,13 @@ async function putPrivate(pathname, body, contentType, env) {
         addRandomSuffix: false,
     });
     const link = await signGetUrl(blob.pathname, env);
-    return { url: link.url, size: body.length, contentType, expiresAt: link.expiresAt };
+    return {
+        url: link.url,
+        pathname: blob.pathname,
+        size: body.length,
+        contentType,
+        expiresAt: link.expiresAt,
+    };
 }
 /**
  * A private blob has to be handed out as a signed, expiring link: the image
@@ -245,5 +251,54 @@ export async function readStoredImage(url, env = process.env) {
     const body = Buffer.concat(chunks);
     const mimeType = (result.headers.get("content-type") || "image/png").split(";")[0].trim();
     return { data: body.toString("base64"), mimeType };
+}
+/**
+ * The path segment under which this server re-serves its own stored images.
+ *
+ * A private store can only hand out signed links, which lapse — fine for one
+ * edit, useless for a link someone keeps. Serving the bytes ourselves gives a
+ * URL that never expires, at the cost of making the object readable by anyone
+ * holding the link. That is the same exposure a public store would give, and
+ * the pathname is a random UUID, so it is not guessable.
+ */
+export const IMAGE_ROUTE = "/i/";
+export function stableImageUrl(baseUrl, pathname) {
+    if (!baseUrl)
+        return undefined;
+    return `${baseUrl.replace(/\/+$/, "")}${IMAGE_ROUTE}${pathname.split("/").map(encodeURIComponent).join("/")}`;
+}
+/** Read one of this store's own images by its pathname, for re-serving. */
+export async function openStoredImage(pathname, env = process.env) {
+    if (!isUploadConfigured(env))
+        return null;
+    // Only ever serve what this server itself stored.
+    if (!pathname.startsWith(PREFIX) || pathname.includes(".."))
+        return null;
+    const { head, get } = await import("@vercel/blob");
+    const token = env.BLOB_READ_WRITE_TOKEN;
+    let url;
+    try {
+        url = (await head(pathname, { token })).url;
+    }
+    catch {
+        return null;
+    }
+    const access = new URL(url).hostname.includes(".private.") ? "private" : "public";
+    const result = await get(`${new URL(url).origin}${new URL(url).pathname}`, { access, token });
+    if (!result || result.statusCode !== 200 || !result.stream)
+        return null;
+    const chunks = [];
+    const reader = result.stream.getReader();
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done)
+            break;
+        if (value)
+            chunks.push(Buffer.from(value));
+    }
+    return {
+        body: Buffer.concat(chunks),
+        contentType: (result.headers.get("content-type") || "image/png").split(";")[0].trim(),
+    };
 }
 //# sourceMappingURL=uploads.js.map

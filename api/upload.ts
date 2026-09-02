@@ -21,10 +21,11 @@ import {
   applyCorsHeaders,
   authorizeRequest,
   readRawBody,
+  resolveBaseUrl,
   writeJson,
   type NodeRequest,
 } from "../src/http-transport.js";
-import { MAX_UPLOAD_BYTES, isUploadConfigured, storeImage } from "../src/uploads.js";
+import { MAX_UPLOAD_BYTES, isUploadConfigured, stableImageUrl, storeImage } from "../src/uploads.js";
 
 loadDotEnv();
 
@@ -60,8 +61,11 @@ export default async function handler(req: NodeRequest, res: ServerResponse): Pr
     const body = await readRawBody(req, MAX_UPLOAD_BYTES);
     const source = new URL(req.url ?? "/", "http://localhost").searchParams.get("source") ?? undefined;
     const result = await storeImage(body, headerValue(req, "content-type"), process.env, source);
+    // The signed URL lapses in hours; this deployment's own route does not.
+    const stable = stableImageUrl(resolveBaseUrl(req, authConfig), result.pathname);
+    const { expiresAt, ...rest } = result;
     writeJson(res, 201, {
-      ...result,
+      ...(stable ? { ...rest, url: stable, signedUrl: result.url } : result),
       message: "Pass this url to the images parameter of edit_image or submit_task.",
     });
   } catch (error) {

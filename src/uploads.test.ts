@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
+  IMAGE_ROUTE,
   getUploadSources,
   isUploadConfigured,
   normalizeImageContentType,
   resolveUploadSource,
+  stableImageUrl,
   storeImage,
   MAX_UPLOAD_BYTES,
 } from './uploads.js';
@@ -185,5 +187,100 @@ describe('upload sources', () => {
     const configured = env('Farmacia Paula, De Por Vida');
     expect(() => resolveUploadSource(undefined, configured)).toThrow(/Farmacia Paula, De Por Vida/);
     expect(() => resolveUploadSource('Kiosco', configured)).toThrow(/Unknown source 'Kiosco'/);
+  });
+});
+
+
+describe('stableImageUrl', () => {
+  it('builds a link on this deployment that outlives any signature', () => {
+    expect(stableImageUrl('https://shop.vercel.app', 'imagegen/de-por-vida/abc.png')).toBe(
+      'https://shop.vercel.app/i/imagegen/de-por-vida/abc.png'
+    );
+  });
+
+  it('does not double the slash when the origin carries one', () => {
+    expect(stableImageUrl('https://shop.vercel.app/', 'imagegen/abc.png')).toBe(
+      'https://shop.vercel.app/i/imagegen/abc.png'
+    );
+  });
+
+  it('escapes each segment without escaping the separators', () => {
+    expect(stableImageUrl('https://x.dev', 'imagegen/de por vida/a b.png')).toBe(
+      'https://x.dev/i/imagegen/de%20por%20vida/a%20b.png'
+    );
+  });
+
+  it('has nothing to offer when the transport does not know the origin', () => {
+    expect(stableImageUrl(undefined, 'imagegen/abc.png')).toBeUndefined();
+  });
+
+  it('agrees with the route the serving function strips', () => {
+    const url = new URL(stableImageUrl('https://x.dev', 'imagegen/abc.png')!);
+    expect(decodeURIComponent(url.pathname).slice(IMAGE_ROUTE.length)).toBe('imagegen/abc.png');
+  });
+});
+
+
+describe('openStoredImage', () => {
+  const env = { BLOB_READ_WRITE_TOKEN: 'tok' } as NodeJS.ProcessEnv;
+  const streamOf = (buffer: Buffer) =>
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(buffer));
+        controller.close();
+      },
+    });
+
+  afterEach(() => {
+    vi.resetModules();
+    vi.doUnmock('@vercel/blob');
+  });
+
+  it('serves an image this server stored', async () => {
+    const head = vi.fn(async () => ({
+      url: 'https://x.private.blob.vercel-storage.com/imagegen/de-por-vida/a.png',
+    }));
+    const get = vi.fn(async () => ({
+      statusCode: 200,
+      stream: streamOf(Buffer.from('the-bytes')),
+      headers: new Headers({ 'content-type': 'image/png' }),
+    }));
+    vi.doMock('@vercel/blob', () => ({ head, get }));
+    const { openStoredImage } = await import('./uploads.js');
+
+    const served = await openStoredImage('imagegen/de-por-vida/a.png', env);
+    expect(served!.body.toString()).toBe('the-bytes');
+    expect(served!.contentType).toBe('image/png');
+    // Read with the store token, against a private store.
+    expect(get).toHaveBeenCalledWith(
+      'https://x.private.blob.vercel-storage.com/imagegen/de-por-vida/a.png',
+      { access: 'private', token: 'tok' }
+    );
+  });
+
+  it('refuses to serve anything outside its own prefix', async () => {
+    const head = vi.fn();
+    vi.doMock('@vercel/blob', () => ({ head, get: vi.fn() }));
+    const { openStoredImage } = await import('./uploads.js');
+
+    expect(await openStoredImage('secrets/env.png', env)).toBeNull();
+    expect(await openStoredImage('imagegen/../secrets/env.png', env)).toBeNull();
+    expect(head).not.toHaveBeenCalled();
+  });
+
+  it('is a miss, not a crash, when the object is gone', async () => {
+    vi.doMock('@vercel/blob', () => ({
+      head: vi.fn(async () => {
+        throw new Error('not found');
+      }),
+      get: vi.fn(),
+    }));
+    const { openStoredImage } = await import('./uploads.js');
+    expect(await openStoredImage('imagegen/gone.png', env)).toBeNull();
+  });
+
+  it('does nothing at all without a store', async () => {
+    const { openStoredImage } = await import('./uploads.js');
+    expect(await openStoredImage('imagegen/a.png', {} as NodeJS.ProcessEnv)).toBeNull();
   });
 });

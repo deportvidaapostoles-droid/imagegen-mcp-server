@@ -261,6 +261,7 @@ Resulting endpoints:
 | `GET /health` | `api/health.ts` | Health check (`/api/health` also works) |
 | `POST /api/upload` | `api/upload.ts` | Upload an image, get a URL for `edit_image` (needs a Blob store) |
 | `GET /api/sources` | `api/sources.ts` | The places photos can be filed under (`UPLOAD_SOURCES`) |
+| `GET /i/:path*` | `api/image.ts` | Permanent link to a stored image (unauthenticated) |
 | `GET /.well-known/oauth-protected-resource` | `api/oauth-protected-resource.ts` | OAuth metadata (RFC 9728), when authentication is enabled |
 | `GET /.well-known/oauth-authorization-server` | `api/oauth-authorization-server.ts` | Mirror of the identity provider's discovery document |
 | `GET /` | static | Landing page (`web/index.html`) |
@@ -466,7 +467,20 @@ disagree; it is unauthenticated, since it only echoes names already printed on a
 public page. Deployments that leave it unset keep one shared bucket and never
 see the picker.
 
-The URL you get back depends on how the Blob store was created:
+Whatever the store's access mode, the `url` you get back is this deployment's
+own **permanent link** — `https://<your-project>/i/imagegen/<place>/<id>.png`.
+It never expires, so it survives being saved in a chat or pasted into a
+scheduling tool, and `edit_image` reads it straight out of the store rather than
+fetching it back over the network. A private store's signed link is still
+returned alongside it as `signedUrl` for anything that needs to go directly to
+the bucket.
+
+`/i/` is unauthenticated, as it must be — an image someone opens on their phone
+cannot carry a bearer token. Pathnames are random UUIDs, so this is the same
+exposure a public Blob store gives; it serves nothing outside the `imagegen/`
+prefix.
+
+The URL you get back from the store itself depends on how it was created:
 
 - **Public store** — a permanent, unguessable URL. Anyone holding the link can
   view the image.
@@ -495,6 +509,7 @@ api/health.ts          Vercel serverless function -> /health
 api/oauth-*.ts         Vercel serverless functions -> /.well-known/oauth-*
 api/upload.ts          Vercel serverless function -> /api/upload
 api/sources.ts         Vercel serverless function -> /api/sources
+api/image.ts           Vercel serverless function -> /i/<pathname>
 web/upload.html        Upload page: camera, gallery, drag and drop
 web/index.html         Static landing page (Vercel output directory)
 ```
